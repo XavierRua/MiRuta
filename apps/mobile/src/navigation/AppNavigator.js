@@ -13,6 +13,8 @@ import ReportesDiaScreen from '../screens/ReportesDiaScreen';
 import VisitaDetalleScreen from '../screens/VisitaDetalleScreen';
 import UbicacionVisitaScreen from '../screens/UbicacionVisitaScreen';
 import VisitasMapaScreen from '../screens/VisitasMapaScreen';
+import DocumentosRegistroScreen from '../screens/DocumentosRegistroScreen';
+import DocumentoScreen from '../screens/DocumentoScreen';
 import TabsNavigator from './TabsNavigator';
 
 const Stack = createNativeStackNavigator();
@@ -25,6 +27,7 @@ const pantallaPorPaso = {
   bloqueado: ['Bloqueado', BloqueadoScreen],
   consentimiento: ['Consentimiento', ConsentimientoScreen],
   permisos: ['Permisos', PermisosScreen],
+  documentos: ['DocumentosRegistro', DocumentosRegistroScreen],
 };
 
 export default function AppNavigator() {
@@ -76,6 +79,11 @@ export default function AppNavigator() {
             name="VisitasMapa"
             component={VisitasMapaScreen}
             options={{ headerShown: true, title: 'Visitas de hoy en el mapa' }}
+          />
+          <Stack.Screen
+            name="Documento"
+            component={DocumentoScreen}
+            options={{ headerShown: true, title: 'Documento' }}
           />
         </>
       )}

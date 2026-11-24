@@ -2,7 +2,17 @@
 // Hoy usa datos de ejemplo; cuando conectemos Supabase, solo cambia este archivo.
 import { INDICADORES } from '../config/indicadores';
 import { programacionesEjemplo } from '../data/programacion';
-import { cuentasDemo, horario, horarioSemana, hoy, jornadas, reportesDeEjemplo, vehiculo, yo } from '../data/mock';
+import {
+  cuentasDemo,
+  documentosAdicionales,
+  horario,
+  horarioSemana,
+  hoy,
+  jornadas,
+  reportesDeEjemplo,
+  vehiculo,
+  yo,
+} from '../data/mock';
 import { mismoDia, soloDia } from '../utils/fechas';
 import { dentroDeLaFranja, estadoFranja, franjasDelDia } from '../utils/reportes';
 import { partesColombia } from '../utils/horaColombia';
@@ -27,6 +37,26 @@ export const api = {
   // Límite de velocidad y rangos de eficiencia que configura el administrador.
   // Con Supabase: select * from configuracion_empresa (los mismos valores del panel web).
   getIndicadores: () => INDICADORES,
+
+  // ---------- Documentos ----------
+  // Adicionales (ARL, planilla, alturas, confinados, exámenes): los sube SST desde la web; aquí solo se leen.
+  // Con Supabase: select de documentos_trabajador del propio trabajador (la RLS de 0011 decide quién ve cada uno).
+  getDocumentosAdicionales: () => documentosAdicionales,
+  // Con Supabase: sube la foto al bucket privado "documentos" y crea una nueva versión (la anterior se conserva).
+  subirDocumentoVehiculo: async (doc) => {
+    await espera(500);
+    console.log('[demo] documento', doc.id, doc.vence, `${doc.foto?.pesoKB ?? '?'} KB`);
+  },
+
+  // ---------- Eliminación del perfil ----------
+  // El trabajador la solicita; solo se ejecuta cuando el administrador la aprueba (0011).
+  solicitarEliminacionPerfil: async (motivo) => {
+    await espera(500);
+    return { estado: 'pendiente', solicitadaEn: new Date().toISOString(), motivo };
+  },
+  cancelarEliminacionPerfil: async () => {
+    await espera(300);
+  },
   // Visitas que programó el administrador para este trabajador.
   // Con Supabase: select de programaciones + visitas del día (0008), y suscripción en tiempo real a cambios.
   getProgramaciones: () => programacionesEjemplo,

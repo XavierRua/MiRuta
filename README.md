@@ -18,7 +18,11 @@ Plataforma multiempresa para monitorear en tiempo real a los trabajadores de cam
 - **Visitas de hoy:** solo las que programó el administrador para ese día (ruta, obra o zona), con estado *Pendiente*, *En curso* (ruta empezada), *Cumplida* (el GPS confirmó la llegada) o *No cumplida* (terminó la jornada sin llegar). Al tocarla se ven los detalles; en **Ubicación**, el mapa con el punto y la geocerca, tu ubicación actual, la distancia hasta el lugar y el botón **Cómo llegar** (Google Maps o Waze). Con más de una visita, **Ver todas en el mapa**: numeradas por hora y con color por estado (amarillo pendiente, verde cumplida, rojo no cumplida). Notificación con sonido cuando le asignan, cambian o cancelan una visita.
 - **Registro automático por geocerca** (obra y zona): cada entrada y salida queda por separado, el tiempo dentro es la suma de todos los periodos y el mapa muestra el recorrido con las entradas (verde) y salidas (rojo). La salida se confirma después de la tolerancia que configura el administrador (por defecto 3 min) y queda con la hora en que salió. El trabajador no puede modificar estos registros. Si sale y es su única visita del día, recibe una notificación con sonido y el administrador una alerta con su nombre, la hora y la ubicación.
 - Pestaña **Historial**: selector Día / Semana / Mes / Rango y filtros del período (**Horas extras**, **Kilometraje**, **Eficiencia** y **Excesos**) con el total y el detalle por día; rango Desde–Hasta con calendario, km, lugares visitados (zona, cliente u obra), reportes y eficiencia de cada día y del periodo, y visitas programadas de cada día con llegada, salida, permanencia y si se cumplieron.
-- Pestaña **Mi perfil**: datos, vehículo, documentos, horario y autorización de datos.
+- Pestaña **Mi perfil**: datos, horario y autorización de datos.
+  - **Mi vehículo**: foto y vencimiento del SOAT, licencia, matrícula y técnico-mecánica, con color por estado (🟢 vigente, 🟠 vence en 15 días o menos, 🔴 vencido). Se toman con la cámara al registrarse y se actualizan al renovarlos (se conserva la versión anterior).
+  - **Documentos adicionales** (ARL, planilla, alturas, espacios confinados, exámenes médicos): solo lectura; los sube SST desde la web. Los exámenes médicos solo los ven el trabajador, SST y el administrador.
+  - Avisos con sonido 15 días antes y el día que vence cada documento.
+  - **Eliminar mi perfil**: envía una solicitud que el administrador debe aprobar.
 
 **Panel web (administrador y supervisor)**
 - Mapa en vivo con la foto de cada trabajador, el color de su estado, batería, último envío y puntos sin enviar.
@@ -89,6 +93,7 @@ MiRuta/
 │                               0008: programación de visitas (llegada/salida por GPS, no cumplidas y avisos)
 │                               0009: entradas y salidas por geocerca, tolerancia y alerta de salida del área
 │                               0010: cierre de reportes al terminar la jornada (+1 hora de margen) en el servidor
+│                               0011: documentos con versiones, rol SST, avisos de vencimiento y eliminación del perfil
 └── docs/                       Definición del proyecto y cálculo de almacenamiento
 ```
 
@@ -122,6 +127,12 @@ Si es la primera vez después de agregar los reportes de actividad, instala tamb
 
 ```bash
 npx expo install expo-image-picker expo-image-manipulator expo-location expo-notifications @react-native-community/datetimepicker expo-secure-store expo-crypto expo-device
+```
+
+Para guardar las fotos de los documentos en el celular:
+
+```bash
+npx expo install expo-file-system
 ```
 
 Para el mapa del detalle de la visita:

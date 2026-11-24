@@ -197,3 +197,28 @@ export const cuentasDemo = [
     celularVinculado: 'Samsung Galaxy A54', // ya tiene otro celular: se rechaza y se avisa
   },
 ];
+
+// ---------- Documentos adicionales (los sube SST desde la web) ----------
+// Fechas relativas a hoy para ver los tres colores: vigente, próximo a vencer y vencido.
+const enDias = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+export const documentosAdicionales = {
+  arl: { vence: enDias(190), detalle: 'Sura · riesgo II', subidoPor: 'Laura Gómez (SST)', subidoEn: enDias(-175) },
+  planilla: {
+    vence: enDias(9),
+    detalle: 'Pago del mes en curso',
+    subidoPor: 'Laura Gómez (SST)',
+    subidoEn: enDias(-21),
+  },
+  alturas: { vence: enDias(-4), detalle: 'Nivel avanzado', subidoPor: 'Laura Gómez (SST)', subidoEn: enDias(-369) },
+  confinados: null, // aún no lo ha subido SST
+  examenes: {
+    vence: enDias(240),
+    detalle: 'Examen periódico · apto',
+    subidoPor: 'Laura Gómez (SST)',
+    subidoEn: enDias(-125),
+  },
+};

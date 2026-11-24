@@ -27,4 +27,6 @@ export const HORA_SERVIDOR = {
 export const FOTOS = {
   tarea: { ladoMax: 1024, calidad: 0.5 },
   selfie: { ladoMax: 480, calidad: 0.5 },
+  // Documentos (SOAT, licencia…): un poco más grandes para que se lean el texto y los números (~120–220 KB)
+  documento: { ladoMax: 1400, calidad: 0.55 },
 };

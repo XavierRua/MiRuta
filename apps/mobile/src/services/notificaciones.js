@@ -71,7 +71,8 @@ async function programar(fechaServidor, titulo, cuerpo, datos) {
 // 2. 10 minutos antes de cerrar: "Te quedan 10 minutos"
 // 3. al cerrar la hora: "No reportaste" (se cancela si envía el reporte)
 export async function programarRecordatorios(franjas, reportes) {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  // Solo se cancelan los recordatorios de reportes (los avisos de documentos se mantienen)
+  await cancelarPorTipo(['reporte', 'no_reporto']);
   Object.keys(programadas).forEach((k) => delete programadas[k]);
   let total = 0;
 
@@ -130,6 +131,44 @@ export async function notificarVisita(titulo, cuerpo) {
   await prepararNotificaciones();
   await Notifications.scheduleNotificationAsync({
     content: contenido(titulo, cuerpo, { tipo: 'visita' }),
+    trigger: Platform.OS === 'android' ? { channelId: CANAL } : null,
+  });
+}
+
+// Cancela las notificaciones programadas de ciertos tipos (datos.tipo)
+async function cancelarPorTipo(tipos) {
+  const todas = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(
+    todas
+      .filter((n) => tipos.includes(n.content?.data?.tipo))
+      .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
+  );
+}
+
+// Avisos de vencimiento de documentos: 15 días antes y el día que vence (a las 8:00 a. m.).
+// docs = [{ id, nombre, vence: 'AAAA-MM-DD' }]. Al administrador y a SST les avisa el servidor (0011).
+export async function programarAvisosDocumentos(docs, diasAviso) {
+  await cancelarPorTipo(['documento']);
+  for (const d of docs) {
+    if (!d.vence) continue;
+    const [a, m, dd] = d.vence.split('-').map(Number);
+    const vence = new Date(a, m - 1, dd, 8, 0, 0);
+    const antes = new Date(vence.getTime() - diasAviso * 24 * 3600000);
+    const datos = { tipo: 'documento', documento: d.id };
+    await programar(
+      antes,
+      'Documento próximo a vencer',
+      `Tu ${d.nombre} vence en ${diasAviso} días. Renuévalo a tiempo.`,
+      datos,
+    );
+    await programar(vence, 'Documento vencido', `Tu ${d.nombre} vence hoy. Actualízalo en Mi perfil.`, datos);
+  }
+}
+
+// Aviso inmediato (por ejemplo, al abrir la app con un documento ya vencido)
+export async function notificarAhora(titulo, cuerpo, datos = {}) {
+  await Notifications.scheduleNotificationAsync({
+    content: contenido(titulo, cuerpo, datos),
     trigger: Platform.OS === 'android' ? { channelId: CANAL } : null,
   });
 }

@@ -5,12 +5,14 @@ import { CLAVES, borrarTodo, guardar, leer } from '../services/almacen';
 import { infoDispositivo } from '../services/dispositivo';
 import { estaBloqueado, guardarPin, reiniciarIntentos, tienePin, verificarPin } from '../services/pin';
 import { api } from '../services/api';
+import { borrarDocumentos } from '../services/archivos';
+import { documentosVehiculoCompletos } from './DocumentosContext';
 
 const SesionContext = createContext(null);
 
 // Pasos del ingreso (AppNavigator muestra la pantalla de cada paso):
 // cargando → activar (primera vez en este celular) → crearPin → pin (cada vez que entra)
-// → consentimiento → permisos → listo (pestañas)
+// → consentimiento → permisos → documentos (fotos de SOAT, licencia, matrícula y técnico-mecánica) → listo (pestañas)
 // bloqueado: 5 PIN incorrectos; se avisa al administrador
 export function SesionProvider({ children }) {
   const [paso, setPaso] = useState('cargando');
@@ -21,6 +23,8 @@ export function SesionProvider({ children }) {
   const continuar = useCallback(async () => {
     if (!(await leer(CLAVES.consentimiento))) return setPaso('consentimiento');
     if (!(await leer(CLAVES.permisos))) return setPaso('permisos');
+    if (!(await leer(CLAVES.documentosOmitidos)) && !(await documentosVehiculoCompletos()))
+      return setPaso('documentos');
     setPaso('listo');
   }, []);
 
@@ -85,6 +89,11 @@ export function SesionProvider({ children }) {
     },
     completarPermisos: async () => {
       await guardar(CLAVES.permisos, true);
+      await continuar();
+    },
+    // Fotos de los documentos del vehículo tomadas (o "omitir por ahora" en la demo)
+    completarDocumentos: async (omitido = false) => {
+      if (omitido) await guardar(CLAVES.documentosOmitidos, true);
       setPaso('listo');
     },
 
@@ -98,6 +107,7 @@ export function SesionProvider({ children }) {
     },
     desvincularDemo: async () => {
       await borrarTodo();
+      borrarDocumentos();
       setVinculo(null);
       setPaso('activar');
     },

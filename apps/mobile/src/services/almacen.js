@@ -11,6 +11,8 @@ export const CLAVES = {
   horasExtra: 'miruta.horasExtra',
   visitas: 'miruta.visitas',
   visitasAsignadas: 'miruta.visitasAsignadas',
+  eliminacion: 'miruta.eliminacion',
+  documentosOmitidos: 'miruta.documentosOmitidos', // solo demo
 };
 
 export async function leer(clave) {
@@ -23,6 +25,10 @@ export async function guardar(clave, valor) {
 }
 
 export async function borrar(clave) {
+  await SecureStore.deleteItemAsync(clave);
+}
+
+export async function borrarClave(clave) {
   await SecureStore.deleteItemAsync(clave);
 }
 

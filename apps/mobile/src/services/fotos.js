@@ -74,3 +74,12 @@ export async function tomarSelfie() {
   if (r.canceled) return null;
   return { ...(await comprimir(r.assets[0], FOTOS.selfie)), origen: 'camara', tomadaEn: new Date() };
 }
+
+// Foto de un documento (SOAT, licencia, matrícula, técnico-mecánica): cámara trasera, sin galería,
+// comprimida para que se lea pero sin ocupar mucho espacio
+export async function tomarFotoDocumento() {
+  await permisoCamara();
+  const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8, exif: false });
+  if (r.canceled) return null;
+  return { ...(await comprimir(r.assets[0], FOTOS.documento)), tomadaEn: new Date().toISOString() };
+}

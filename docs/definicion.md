@@ -83,3 +83,21 @@
   - Si termina la jornada sin llegar queda **No cumplida** y el administrador recibe una alerta.
 - El trabajador recibe una **notificación push con sonido** (Expo Push, gratis) cuando le asignan, cambian, cancelan o quitan una visita.
 - El cumplimiento (programadas, cumplidas, no cumplidas, permanencia promedio) aparece en la web y en el historial del trabajador.
+
+### Registro automático por geocerca (obra y zona)
+
+- La geocerca la configura el administrador: radio de la obra o área de la zona en Programación.
+- **Entrada:** se registra al entrar. **Salida:** al salir, pero solo se confirma si sigue fuera más que la **tolerancia** (Configuración, 1 a 15 min, por defecto 3); la hora registrada es la del momento en que salió. Si vuelve antes, se toma como un salto del GPS y el periodo sigue.
+- Cada entrada y salida es un periodo aparte; el **tiempo dentro** del día es la suma de los periodos. Se guarda el recorrido para verlo en el mapa.
+- **Salida del área asignada:** si es su única visita del día y sale durante la jornada, el trabajador recibe una notificación con sonido y el administrador una alerta con nombre, hora y ubicación. Con más visitas ese día no hay alerta (se entiende que va a la siguiente). Al terminar la jornada tampoco.
+- Lo escribe solo el servidor con los puntos GPS (0009): el trabajador no tiene cómo crear, editar ni borrar estos registros.
+
+## Documentos del trabajador y rol SST
+
+- **Vehículo** (SOAT, licencia, matrícula, técnico-mecánica): el trabajador toma la foto de cada uno al registrarse (paso obligatorio después de los permisos) y la actualiza al renovarlo. Cada renovación es una versión nueva; las anteriores se conservan.
+- **Adicionales** (ARL, planilla de seguridad social, alturas, espacios confinados, exámenes médicos): los sube y actualiza solo el rol **SST** desde la web; el trabajador solo los ve.
+- **Privacidad**: los exámenes médicos solo los ven el trabajador, SST y el administrador (los supervisores no). SST solo accede a documentos y a sus alertas, no al GPS.
+- **Avisos**: 15 días antes y al vencer, al trabajador (notificación con sonido), al administrador y a SST (alertas en la web).
+- **Eliminación del perfil**: el trabajador la solicita y el administrador la aprueba. Se borran los datos personales y los documentos del vehículo; se conservan los registros que la ley exige (documentos de SST, Decreto 1072 de 2015: 20 años).
+- **Tamaño de las fotos**: lado mayor 1400 px, JPEG al 55 % → unos 120–220 KB por documento. Cuatro documentos ≈ 0,8 MB por trabajador; con una renovación al año, unos 1,6 MB. El plan gratuito de Supabase (1 GB de archivos) alcanza para unos 500 trabajadores con dos años de historial, junto con las fotos de los reportes (ver el cálculo de reportes arriba).
+- **Pendiente (web)**: pantallas del rol SST para subir y actualizar documentos por trabajador, y la aprobación de eliminaciones para el administrador.
