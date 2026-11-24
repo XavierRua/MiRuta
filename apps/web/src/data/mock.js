@@ -592,6 +592,14 @@ export const reportesActividad = generarReportes();
 // - velocidad promedio: km / tiempo en movimiento (se descuentan las paradas)
 // - velocidad máxima y "picos": puntos por encima de 50 km/h, con hora y ubicación
 // Los excesos se calculan comparando los picos con el límite que configure el administrador.
+// Lugares de ejemplo donde se hacen horas extras (con GPS real: la ubicación al iniciarlas)
+const LUGARES_EXTRA = [
+  { nombre: 'Obra Torre Norte', lat: 6.2853, lng: -75.5651 },
+  { nombre: 'Bodega central', lat: 6.2335, lng: -75.5847 },
+  { nombre: 'Cliente Éxito Colombia', lat: 6.2069, lng: -75.5711 },
+  { nombre: 'Zona Centro', lat: 6.25, lng: -75.5681 },
+];
+
 function generarDesempeno() {
   const lista = [];
   const hoy = new Date();
@@ -638,6 +646,7 @@ function generarDesempeno() {
             km: Math.round((6 + (semilla % 14)) * 10) / 10,
             esperados,
             enviados: Math.max(0, esperados - (semilla % 3 === 0 ? 1 : 0)),
+            lugar: LUGARES_EXTRA[semilla % LUGARES_EXTRA.length], // dónde hizo las horas extras
           };
         }
         // Una sesión en curso hoy (si ya pasó la jornada) para ver cómo se muestra
@@ -653,6 +662,7 @@ function generarDesempeno() {
             km: 4.2,
             esperados,
             enviados: esperados,
+            lugar: LUGARES_EXTRA[0],
           };
         }
         lista.push({

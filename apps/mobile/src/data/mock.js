@@ -96,6 +96,7 @@ function generarJornadas() {
               km: Math.round((8 + (semilla % 12)) * 10) / 10,
               reportesEsperados: 1,
               reportesEnviados: semilla % 2,
+              lugar: lugares[1 + (semilla % (lugares.length - 1))].nombre, // dónde hizo las horas extras
             }
           : null,
       km: Math.round((sabado ? 18 : 45) * 10 + (semilla % 30) * 10) / 10,

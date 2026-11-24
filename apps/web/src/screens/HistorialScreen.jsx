@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
-import { FiDownload, FiAlertTriangle } from 'react-icons/fi';
+import { FiDownload, FiAlertTriangle, FiEye, FiFlag } from 'react-icons/fi';
+import VisitaDetalleModal from '../components/VisitaDetalleModal';
+import FiltroHistorialAdmin from '../components/FiltroHistorialAdmin';
+import { FILTROS } from '../utils/filtrosHistorial';
 import Mapa from '../components/Mapa';
 import ChipEficiencia from '../components/ChipEficiencia';
 import FiltroPeriodo, { periodoInicial } from '../components/FiltroPeriodo';
 import { useConfig } from '../context/ConfigContext';
 import { useProgramacion } from '../context/ProgramacionContext';
-import { generarVisitas } from '../utils/visitas';
+import { ESTADOS_VISITA, TIPOS, generarVisitas, textoPermanencia } from '../utils/visitas';
 import { useEmpresa } from '../hooks/useEmpresa';
 import { api } from '../services/api';
 import { aTextoFecha, deTextoFecha, validarRango } from '../utils/fechas';
@@ -19,8 +22,29 @@ export default function HistorialScreen() {
   const [trab, setTrab] = useState(lista[0]?.id);
   const [filtro, setFiltro] = useState(periodoInicial('Semana'));
   const [diaMapa, setDiaMapa] = useState(null);
+  const [detalle, setDetalle] = useState(null);
+  const [vista, setVista] = useState('jornadas'); // jornadas (lo de siempre) u otro filtro del período
+  const todos = trab === 'todos'; // "Todos los trabajadores" (solo para los filtros)
   const t = lista.find((x) => x.id === trab) ?? lista[0];
   const error = validarRango(filtro.desde, filtro.hasta);
+  // Días de todos los trabajadores o del elegido, para los filtros
+  const diasFiltro = useMemo(
+    () =>
+      error || vista === 'jornadas'
+        ? []
+        : api.getIndicadoresDiarios({
+            empresaId,
+            trabajadorId: todos ? '' : t?.id,
+            desde: deTextoFecha(filtro.desde),
+            hasta: deTextoFecha(filtro.hasta),
+            limiteVelocidad: indicadores.limiteVelocidad,
+          }),
+    [empresaId, todos, t?.id, filtro, error, vista, indicadores.limiteVelocidad],
+  );
+  const periodoTexto =
+    filtro.desde === filtro.hasta
+      ? deTextoFecha(filtro.desde).toLocaleDateString('es-CO')
+      : `${deTextoFecha(filtro.desde).toLocaleDateString('es-CO')} – ${deTextoFecha(filtro.hasta).toLocaleDateString('es-CO')}`;
 
   const dias = useMemo(
     () =>
@@ -38,25 +62,37 @@ export default function HistorialScreen() {
   const total = api.resumirIndicadores(dias)[0];
   // Visitas programadas por el administrador: cumplidas / programadas de cada día
   const { programaciones } = useProgramacion();
+  const visitasPeriodo = useMemo(
+    () =>
+      error || !t ? [] : generarVisitas(programaciones, [t.id], deTextoFecha(filtro.desde), deTextoFecha(filtro.hasta)),
+    [programaciones, t?.id, filtro, error],
+  );
   const visitasPorDia = useMemo(() => {
     const m = new Map();
-    if (error || !t) return m;
-    generarVisitas(programaciones, [t.id], deTextoFecha(filtro.desde), deTextoFecha(filtro.hasta)).forEach((v) => {
+    visitasPeriodo.forEach((v) => {
       const k = aTextoFecha(v.fecha);
-      const c = m.get(k) ?? { total: 0, cumplidas: 0 };
+      const c = m.get(k) ?? { total: 0, cumplidas: 0, alertas: 0 };
       c.total += 1;
       if (v.estado === 'cumplida') c.cumplidas += 1;
+      c.alertas += v.alertasSalida.length;
       m.set(k, c);
     });
     return m;
-  }, [programaciones, t?.id, filtro, error]);
+  }, [visitasPeriodo]);
   const horasExtraTotal = dias.reduce((t, d) => t + (d.horasExtra?.horas ?? 0), 0);
   const excesos = dias.flatMap((d) => d.excesos.map((e) => ({ ...e, fecha: d.fecha })));
 
   return (
     <div className="pagina">
       <div className="barra">
-        <select value={t?.id} onChange={(e) => setTrab(e.target.value)}>
+        <select
+          value={todos ? 'todos' : t?.id}
+          onChange={(e) => {
+            setTrab(e.target.value);
+            if (e.target.value === 'todos' && vista === 'jornadas') setVista('km');
+          }}
+        >
+          <option value="todos">Todos los trabajadores</option>
           {lista.map((x) => (
             <option key={x.id} value={x.id}>
               {x.nombres} {x.apellidos}
@@ -64,13 +100,40 @@ export default function HistorialScreen() {
           ))}
         </select>
         <FiltroPeriodo valor={filtro} onCambiar={setFiltro} error={error} />
-        <button className="btn">
-          <FiDownload /> Excel
-        </button>
+        {vista === 'jornadas' && (
+          <button className="btn">
+            <FiDownload /> Excel
+          </button>
+        )}
+      </div>
+
+      {/* Filtros del período */}
+      <div className="segmentos filtros-historial">
+        {FILTROS.map((f) => (
+          <button
+            key={f.id}
+            className={vista === f.id ? 'activo' : ''}
+            disabled={f.id === 'jornadas' && todos}
+            title={f.id === 'jornadas' && todos ? 'Elige un trabajador para ver sus jornadas' : ''}
+            onClick={() => setVista(f.id)}
+          >
+            {f.texto}
+          </button>
+        ))}
       </div>
 
       {error ? (
         <div className="aviso error">{error}</div>
+      ) : vista !== 'jornadas' ? (
+        <FiltroHistorialAdmin
+          tipo={vista}
+          dias={diasFiltro}
+          trabajadores={todos ? lista : [t]}
+          persona={(id) => lista.find((x) => x.id === id)}
+          todos={todos}
+          periodoTexto={periodoTexto}
+          limite={indicadores.limiteVelocidad}
+        />
       ) : (
         <>
           <div className="kpis kpis-5">
@@ -154,9 +217,16 @@ export default function HistorialScreen() {
                         {(() => {
                           const v = visitasPorDia.get(aTextoFecha(d.fecha));
                           return v ? (
-                            <span className={`chip ${v.cumplidas === v.total ? 'ok' : 'naranja'}`}>
-                              {v.cumplidas}/{v.total}
-                            </span>
+                            <>
+                              <span className={`chip ${v.cumplidas === v.total ? 'ok' : 'naranja'}`}>
+                                {v.cumplidas}/{v.total}
+                              </span>
+                              {v.alertas > 0 && (
+                                <span className="chip danger" title="Salidas del área asignada">
+                                  <FiAlertTriangle /> {v.alertas}
+                                </span>
+                              )}
+                            </>
                           ) : (
                             '—'
                           );
@@ -185,6 +255,47 @@ export default function HistorialScreen() {
                   )}
                 </tbody>
               </table>
+            </section>
+
+            <section className="panel">
+              <h2>
+                <FiFlag /> Visitas programadas ({visitasPeriodo.length})
+              </h2>
+              {visitasPeriodo.length === 0 ? (
+                <p className="nota">Sin visitas programadas en este periodo.</p>
+              ) : (
+                <ul className="lista-visitas">
+                  {visitasPeriodo.map((v) => (
+                    <li key={v.id}>
+                      <span className={`chip ${TIPOS[v.tipo].clase}`}>{TIPOS[v.tipo].texto}</span>
+                      <div>
+                        <strong>
+                          {fechaCorta(v.fecha)} · {v.titulo}
+                        </strong>
+                        <small className="bloque">
+                          {v.periodos.length
+                            ? v.periodos.map((x) => `${x.entrada}–${x.salida ?? 'dentro'}`).join(' · ')
+                            : v.llegada
+                              ? `${v.llegada}–${v.salida ?? 'en curso'}`
+                              : `Estimada ${v.horaEstimada}`}
+                          {v.permanenciaMin != null && ` · dentro ${textoPermanencia(v.permanenciaMin)}`}
+                        </small>
+                        {v.alertasSalida.map((a, i) => (
+                          <small key={i} className="bloque texto-danger">
+                            <FiAlertTriangle /> Salió del área a las {a.hora}
+                          </small>
+                        ))}
+                      </div>
+                      <span className={`chip ${ESTADOS_VISITA[v.estado].clase}`}>{ESTADOS_VISITA[v.estado].texto}</span>
+                      {v.estado !== 'pendiente' && (
+                        <button className="btn peq" onClick={() => setDetalle(v)}>
+                          <FiEye />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
 
             <section className="panel">
@@ -226,6 +337,14 @@ export default function HistorialScreen() {
             </section>
           </div>
         </>
+      )}
+      {detalle && (
+        <VisitaDetalleModal
+          visita={detalle}
+          trabajador={t}
+          tolerancia={indicadores.toleranciaSalidaMin}
+          onCerrar={() => setDetalle(null)}
+        />
       )}
     </div>
   );

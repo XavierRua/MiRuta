@@ -29,6 +29,12 @@ export function formatoDiaCorto(fecha) {
   return mismoDia(d, hoy()) ? `Hoy · ${texto}` : texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
+// Un solo día (por defecto hoy)
+export function rangoDia(fecha = hoy()) {
+  const d = soloDia(fecha);
+  return { desde: d, hasta: d };
+}
+
 // Rango de los últimos 7 días (incluye hoy)
 export function rangoSemana() {
   const hasta = hoy();

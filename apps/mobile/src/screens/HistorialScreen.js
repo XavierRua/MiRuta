@@ -17,7 +17,8 @@ import { duracionMs } from '../utils/horasExtra';
 import { ahoraServidor } from '../services/horaServidor';
 import { hhmm } from '../utils/reportes';
 import { mismoDia } from '../utils/fechas';
-import { formatoDiaCorto, hoy, rangoMes, rangoSemana, validarRango } from '../utils/fechas';
+import { formatoDiaCorto, hoy, rangoDia, rangoMes, rangoSemana, validarRango } from '../utils/fechas';
+import FiltroHistorial, { FILTROS } from '../components/FiltroHistorial';
 
 // Cómo se muestra cada tipo de lugar (geocerca)
 const tipoLugar = {
@@ -26,13 +27,14 @@ const tipoLugar = {
   Obra: { icono: 'construct', fondo: color.ambarSuave, texto: color.ambar },
 };
 
-const atajos = { Semana: rangoSemana, Mes: rangoMes };
+const atajos = { Día: rangoDia, Semana: rangoSemana, Mes: rangoMes };
 
 export default function HistorialScreen({ navigation }) {
   const inicial = rangoSemana();
   const [desde, setDesde] = useState(inicial.desde);
   const [hasta, setHasta] = useState(inicial.hasta);
   const [atajo, setAtajo] = useState('Semana'); // null cuando el usuario elige fechas a mano
+  const [filtro, setFiltro] = useState('resumen'); // resumen (lo de siempre) u otro filtro del período
 
   const error = validarRango(desde, hasta);
   const { conEstado } = useFranjasHoy(); // jornada normal + horas extras
@@ -58,6 +60,7 @@ export default function HistorialScreen({ navigation }) {
     return {
       inicio: hhmm(new Date(sesiones[0].inicio)),
       fin: ultima.fin ? hhmm(new Date(ultima.fin)) : 'en curso',
+      lugar: sesiones[0].lugar ?? null, // ubicación donde inició las horas extras
       horas: Math.round(sesiones.reduce((t, x) => t + duracionMs(x, ahora), 0) / 360000) / 10,
       km: Math.round(sesiones.reduce((t, x) => t + (x.km ?? 0), 0) * 10) / 10,
       reportesEsperados: fx.length,
@@ -80,7 +83,10 @@ export default function HistorialScreen({ navigation }) {
                   horasExtra: extraHoy ?? j.horasExtra,
                   visitas: visitasDeHoy,
                 }
-              : { ...j, visitas: visitasDeDiaAnterior(api.getProgramaciones(), j.fecha) },
+              : {
+                  ...j,
+                  visitas: visitasDeDiaAnterior(api.getProgramaciones(), j.fecha, api.getHorarioDia(j.fecha)?.fin),
+                },
           ),
     [desde, hasta, error, hoyEf.enviados, hoyEf.esperados, excesosHoy, extraHoy?.horas, extraHoy?.fin, firmaVisitas],
   );
@@ -92,6 +98,7 @@ export default function HistorialScreen({ navigation }) {
   const visitasPeriodo = jornadas.flatMap((j) => j.visitas);
   const cumplidasPeriodo = visitasPeriodo.filter((v) => v.estado === 'cumplida').length;
   const cerradasPeriodo = visitasPeriodo.filter((v) => ['cumplida', 'no_cumplida'].includes(v.estado)).length;
+  const alertasPeriodo = visitasPeriodo.reduce((t, v) => t + (v.alertasSalida?.length ?? 0), 0);
   const horasExtraPeriodo = Math.round(jornadas.reduce((s, j) => s + (j.horasExtra?.horas ?? 0), 0) * 10) / 10;
 
   // Lugares visitados en el período, con cuántas veces se visitó cada uno
@@ -126,7 +133,7 @@ export default function HistorialScreen({ navigation }) {
                 onPress={() => (p === 'Rango' ? setAtajo(null) : elegirAtajo(p))}
               >
                 <Text style={[s.segTexto, activo && s.segTextoActivo]}>
-                  {p === 'Semana' ? 'Últimos 7 días' : p === 'Mes' ? 'Este mes' : 'Personalizado'}
+                  {p /* Día · Semana (últimos 7 días) · Mes (este mes) · Rango (Desde – Hasta) */}
                 </Text>
               </Pressable>
             );
@@ -159,11 +166,23 @@ export default function HistorialScreen({ navigation }) {
           />
         </View>
 
+        {/* Filtros del período: Resumen es lo de siempre; los demás muestran el total y el detalle por día */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filtros}>
+          {FILTROS.map((f) => (
+            <Pressable key={f.id} style={[s.filtro, filtro === f.id && s.filtroActivo]} onPress={() => setFiltro(f.id)}>
+              <Ionicons name={f.icono} size={14} color={filtro === f.id ? '#fff' : color.suave} />
+              <Text style={[s.filtroTexto, filtro === f.id && s.filtroTextoActivo]}>{f.texto}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
         {error ? (
           <View style={s.error}>
             <Ionicons name="alert-circle" size={18} color={color.rojo} />
             <Text style={s.errorTexto}>{error}</Text>
           </View>
+        ) : filtro !== 'resumen' ? (
+          <FiltroHistorial tipo={filtro} jornadas={jornadas} />
         ) : (
           <>
             <View style={s.resumen}>
@@ -190,6 +209,8 @@ export default function HistorialScreen({ navigation }) {
                 <View style={s.efPeriodo}>
                   <Text style={s.efPeriodoTexto}>
                     Visitas cumplidas: {cumplidasPeriodo} de {visitasPeriodo.length}
+                    {alertasPeriodo > 0 &&
+                      ` · ${alertasPeriodo} ${alertasPeriodo === 1 ? 'salida' : 'salidas'} del área`}
                   </Text>
                   <ChipEf pct={porcentaje(cumplidasPeriodo, cerradasPeriodo)} />
                 </View>
@@ -264,11 +285,27 @@ export default function HistorialScreen({ navigation }) {
                             </Text>
                             <Text style={s.visitaTexto}>
                               Est. {v.programacion.hora}
-                              {v.llegada ? ` · llegó ${horaCorta(v.llegada)}` : ''}
-                              {v.salida ? ` · salió ${horaCorta(v.salida)}` : ''}
-                              {v.permanenciaMin != null ? ` · ${textoPermanencia(v.permanenciaMin)}` : ''}
+                              {v.periodos.length === 0 && v.llegada ? ` · llegó ${horaCorta(v.llegada)}` : ''}
+                              {v.periodos.length === 0 && v.salida ? ` · salió ${horaCorta(v.salida)}` : ''}
+                              {v.permanenciaMin != null
+                                ? ` · ${v.periodos.length ? 'dentro ' : ''}${textoPermanencia(v.permanenciaMin)}`
+                                : ''}
                               {v.puntosTotal ? ` · ${v.puntosVisitados}/${v.puntosTotal} puntos` : ''}
                             </Text>
+                            {/* Cada entrada y salida de la geocerca */}
+                            {v.periodos.length > 0 && (
+                              <Text style={s.visitaTexto}>
+                                {v.periodos
+                                  .map((x) => `${horaCorta(x.entrada)}–${x.salida ? horaCorta(x.salida) : 'dentro'}`)
+                                  .join('  ·  ')}
+                              </Text>
+                            )}
+                            {v.alertasSalida.map((a, k) => (
+                              <Text key={k} style={s.visitaAlerta}>
+                                <Ionicons name="warning" size={11} color={color.rojo} /> Salió del área asignada a las{' '}
+                                {horaCorta(a.hora)}
+                              </Text>
+                            ))}
                           </View>
                           <Text style={[s.visitaEstado, { color: e.color, backgroundColor: e.fondo }]}>{e.texto}</Text>
                         </View>
@@ -356,11 +393,25 @@ function Etiqueta({ lugar }) {
 }
 
 const s = StyleSheet.create({
+  filtros: { gap: 8, paddingVertical: 2 },
+  filtro: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#e9edf3',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  filtroActivo: { backgroundColor: color.primario },
+  filtroTexto: { color: color.suave, fontWeight: '600', fontSize: 13 },
+  filtroTextoActivo: { color: '#fff' },
   visitas: { backgroundColor: color.azulSuave, borderRadius: 12, padding: 10, gap: 8 },
   visitasTitulo: { color: color.azul, fontWeight: '700', fontSize: 13 },
   visita: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   visitaNombre: { color: color.texto, fontWeight: '600', fontSize: 13 },
   visitaTexto: { color: color.suave, fontSize: 12 },
+  visitaAlerta: { color: color.rojo, fontSize: 12, fontWeight: '600' },
   visitaEstado: {
     fontSize: 11,
     fontWeight: '700',

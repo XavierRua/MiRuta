@@ -1489,3 +1489,47 @@ textarea {
   width: 100%;
   accent-color: var(--primario);
 }
+
+/* ---------- Filtros del historial (horas extras, km, eficiencia, excesos) ---------- */
+.filtros-historial {
+  margin: 4px 0 14px;
+  flex-wrap: wrap;
+  width: fit-content;
+}
+.filtros-historial button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.filtro-acciones {
+  margin-bottom: 12px;
+}
+.filtro-acciones .nota {
+  margin-right: auto;
+}
+.col-barra {
+  width: 32%;
+}
+.barra-comp {
+  height: 10px;
+  background: #eef2f7;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.barra-comp i {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+  background: var(--primario);
+}
+.barra-comp.horasExtra i {
+  background: #7c3aed;
+}
+.barra-comp.eficiencia i {
+  background: #16a34a;
+}
+.barra-comp.excesos i {
+  background: #dc2626;
+}
+a.enlace {
+  text-decoration: underline;
+}

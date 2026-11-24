@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+import * as Location from 'expo-location';
 import { CLAVES, guardar, leer } from '../services/almacen';
 import { ahoraServidor, sincronizarHora } from '../services/horaServidor';
 import { iniciarRastreo, detenerRastreo } from '../services/rastreo';
@@ -36,6 +37,16 @@ export function HorasExtraProvider({ children }) {
 
   const activa = sesiones.find((s) => !s.fin) ?? null;
 
+  // Última ubicación conocida del GPS (no bloquea si no hay)
+  const lugarActual = async () => {
+    try {
+      const p = await Location.getLastKnownPositionAsync();
+      return p ? { lat: p.coords.latitude, lng: p.coords.longitude } : null;
+    } catch {
+      return null;
+    }
+  };
+
   const iniciar = async () => {
     if (activa) return activa;
     const inicio = await horaOficial();
@@ -45,6 +56,7 @@ export function HorasExtraProvider({ children }) {
       fin: null,
       kmInicio: kmMedidoHoy(),
       km: 0,
+      lugar: await lugarActual(), // dónde inició las horas extras (para el historial)
     };
     await api.iniciarHorasExtra(sesion); // avisa al administrador
     await iniciarRastreo();
