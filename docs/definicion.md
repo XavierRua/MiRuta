@@ -101,3 +101,11 @@
 - **Eliminación del perfil**: el trabajador la solicita y el administrador la aprueba. Se borran los datos personales y los documentos del vehículo; se conservan los registros que la ley exige (documentos de SST, Decreto 1072 de 2015: 20 años).
 - **Tamaño de las fotos**: lado mayor 1400 px, JPEG al 55 % → unos 120–220 KB por documento. Cuatro documentos ≈ 0,8 MB por trabajador; con una renovación al año, unos 1,6 MB. El plan gratuito de Supabase (1 GB de archivos) alcanza para unos 500 trabajadores con dos años de historial, junto con las fotos de los reportes (ver el cálculo de reportes arriba).
 - **Pendiente (web)**: pantallas del rol SST para subir y actualizar documentos por trabajador, y la aprobación de eliminaciones para el administrador.
+
+## Permisos por rol
+
+- Cada función de la app tiene su propio permiso ("interruptor") con una clave, por ejemplo `reportes.enviar` o `visitas.comoLlegar`. El catálogo está en `apps/mobile/src/config/permisos.js` y en la tabla `permisos_catalogo` (0012).
+- La app solo muestra o permite una función si el rol del usuario tiene el permiso encendido. Hoy el trabajador los tiene todos.
+- El administrador de cada empresa los enciende o apaga por rol desde la web (tabla `permisos_rol`), sin cambiar el código.
+- No son permisos (siempre están): la autorización de datos (Ley 1581), cerrar sesión, el estado del rastreo y el registro de documentos del vehículo.
+- Regla para cada función nueva: agregar su clave al catálogo (app y 0012) y envolverla con `<Permiso clave="…">` o `puede('…')`.

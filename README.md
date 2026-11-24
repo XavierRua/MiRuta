@@ -94,6 +94,7 @@ MiRuta/
 │                               0009: entradas y salidas por geocerca, tolerancia y alerta de salida del área
 │                               0010: cierre de reportes al terminar la jornada (+1 hora de margen) en el servidor
 │                               0011: documentos con versiones, rol SST, avisos de vencimiento y eliminación del perfil
+│                               0012: permisos por rol (cada función de la app se enciende o apaga por rol)
 └── docs/                       Definición del proyecto y cálculo de almacenamiento
 ```
 

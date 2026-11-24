@@ -10,6 +10,7 @@ import { api } from '../services/api';
 import { config } from '../config/app';
 import DocumentoFila from '../components/DocumentoFila';
 import { useDocumentos } from '../context/DocumentosContext';
+import { Permiso } from '../context/PermisosContext';
 import { CLAVES, borrarClave, guardar, leer } from '../services/almacen';
 export default function PerfilScreen({ navigation }) {
   const { salir, vinculo, desvincularDemo } = useSesion();
@@ -72,51 +73,59 @@ export default function PerfilScreen({ navigation }) {
           </Text>
         </View>
 
-        <Seccion titulo="Mi vehículo">
-          <View style={s.placaFila}>
-            <Text style={s.placa}>{vehiculo.placa}</Text>
-            <Text style={s.vehDesc}>{vehiculo.descripcion}</Text>
-          </View>
-          <Fila k="Propietario" v={vehiculo.propietario} />
-          {(porVencer > 0 || vencidos > 0) && (
-            <View style={[s.alerta, { backgroundColor: vencidos ? color.rojoSuave : color.naranjaSuave }]}>
-              <Ionicons name="warning" size={16} color={vencidos ? color.rojo : color.naranja} />
-              <Text style={[s.alertaTexto, { color: vencidos ? color.rojo : color.naranja }]}>
-                {[vencidos && `${vencidos} vencido${vencidos > 1 ? 's' : ''}`, porVencer && `${porVencer} por vencer`]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </Text>
+        <Permiso clave="perfil.vehiculo.ver">
+          <Seccion titulo="Mi vehículo">
+            <View style={s.placaFila}>
+              <Text style={s.placa}>{vehiculo.placa}</Text>
+              <Text style={s.vehDesc}>{vehiculo.descripcion}</Text>
             </View>
-          )}
-          {docsVehiculo.map((d) => (
-            <DocumentoFila key={d.id} doc={d} onPress={() => navigation.navigate('Documento', { id: d.id })} />
-          ))}
-          <Text style={s.notaCelular}>Toca un documento para verlo o actualizarlo cuando lo renueves.</Text>
-        </Seccion>
+            <Fila k="Propietario" v={vehiculo.propietario} />
+            {(porVencer > 0 || vencidos > 0) && (
+              <View style={[s.alerta, { backgroundColor: vencidos ? color.rojoSuave : color.naranjaSuave }]}>
+                <Ionicons name="warning" size={16} color={vencidos ? color.rojo : color.naranja} />
+                <Text style={[s.alertaTexto, { color: vencidos ? color.rojo : color.naranja }]}>
+                  {[vencidos && `${vencidos} vencido${vencidos > 1 ? 's' : ''}`, porVencer && `${porVencer} por vencer`]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              </View>
+            )}
+            {docsVehiculo.map((d) => (
+              <DocumentoFila key={d.id} doc={d} onPress={() => navigation.navigate('Documento', { id: d.id })} />
+            ))}
+            <Text style={s.notaCelular}>Toca un documento para verlo o actualizarlo cuando lo renueves.</Text>
+          </Seccion>
+        </Permiso>
 
-        <Seccion titulo="Mi horario">
-          {horario.semana.map((h) => (
-            <Fila key={h.dia} k={h.dia} v={h.horas} />
-          ))}
-        </Seccion>
+        <Permiso clave="perfil.horario.ver">
+          <Seccion titulo="Mi horario">
+            {horario.semana.map((h) => (
+              <Fila key={h.dia} k={h.dia} v={h.horas} />
+            ))}
+          </Seccion>
+        </Permiso>
 
-        <Seccion titulo="Datos personales">
-          <Fila k="Cédula" v={yo.cedula} />
-          <Fila k="Teléfono" v={yo.telefono} />
-          <Fila k="EPS / ARL" v={`${yo.eps} / ${yo.arl}`} />
-          <Fila k="Tipo de sangre" v={yo.tipoSangre} />
-          <Fila k="Emergencia" v={yo.contactoEmergencia} />
-        </Seccion>
+        <Permiso clave="perfil.datos.ver">
+          <Seccion titulo="Datos personales">
+            <Fila k="Cédula" v={yo.cedula} />
+            <Fila k="Teléfono" v={yo.telefono} />
+            <Fila k="EPS / ARL" v={`${yo.eps} / ${yo.arl}`} />
+            <Fila k="Tipo de sangre" v={yo.tipoSangre} />
+            <Fila k="Emergencia" v={yo.contactoEmergencia} />
+          </Seccion>
+        </Permiso>
 
-        <Seccion titulo="Documentos adicionales">
-          {docsAdicionales.map((d) => (
-            <DocumentoFila key={d.id} doc={d} onPress={() => navigation.navigate('Documento', { id: d.id })} />
-          ))}
-          <Text style={s.notaCelular}>
-            Estos documentos los sube y actualiza la persona de SST de tu empresa. Los exámenes médicos solo los ven tú,
-            SST y el administrador.
-          </Text>
-        </Seccion>
+        <Permiso clave="documentos.adicionales.ver">
+          <Seccion titulo="Documentos adicionales">
+            {docsAdicionales.map((d) => (
+              <DocumentoFila key={d.id} doc={d} onPress={() => navigation.navigate('Documento', { id: d.id })} />
+            ))}
+            <Text style={s.notaCelular}>
+              Estos documentos los sube y actualiza la persona de SST de tu empresa. Los exámenes médicos solo los ven
+              tú, SST y el administrador.
+            </Text>
+          </Seccion>
+        </Permiso>
 
         <Pressable style={s.enlace} onPress={() => navigation.navigate('Autorizacion', { soloLectura: true })}>
           <Ionicons name="document-text-outline" size={20} color={color.texto} />
@@ -142,32 +151,34 @@ export default function PerfilScreen({ navigation }) {
         )}
 
         {/* Eliminar el perfil: requiere aprobación del administrador */}
-        {eliminacion ? (
-          <View style={s.eliminacion}>
-            <View style={s.eliminacionCab}>
-              <Ionicons name="time" size={18} color={color.ambar} />
-              <Text style={s.eliminacionTitulo}>Solicitud de eliminación pendiente</Text>
-            </View>
-            <Text style={s.notaCelular}>
-              Enviada el {new Date(eliminacion.solicitadaEn).toLocaleDateString('es-CO')}. Tu perfil se eliminará cuando
-              el administrador la apruebe.
-            </Text>
-            <Pressable onPress={cancelarEliminacion}>
-              <Text style={s.cancelarEliminacion}>Cancelar solicitud</Text>
-            </Pressable>
-            {config.modoDemo && (
-              <Pressable onPress={aprobarDemo}>
-                <Text style={s.demo}>Simular que el administrador la aprueba (solo en la demo)</Text>
+        <Permiso clave="perfil.solicitarEliminacion">
+          {eliminacion ? (
+            <View style={s.eliminacion}>
+              <View style={s.eliminacionCab}>
+                <Ionicons name="time" size={18} color={color.ambar} />
+                <Text style={s.eliminacionTitulo}>Solicitud de eliminación pendiente</Text>
+              </View>
+              <Text style={s.notaCelular}>
+                Enviada el {new Date(eliminacion.solicitadaEn).toLocaleDateString('es-CO')}. Tu perfil se eliminará
+                cuando el administrador la apruebe.
+              </Text>
+              <Pressable onPress={cancelarEliminacion}>
+                <Text style={s.cancelarEliminacion}>Cancelar solicitud</Text>
               </Pressable>
-            )}
-          </View>
-        ) : (
-          <Pressable style={s.enlace} onPress={solicitarEliminacion}>
-            <Ionicons name="trash-outline" size={20} color={color.rojo} />
-            <Text style={[s.enlaceTexto, { color: color.rojo }]}>Eliminar mi perfil</Text>
-            <Text style={s.notaCelular}>Requiere aprobación</Text>
-          </Pressable>
-        )}
+              {config.modoDemo && (
+                <Pressable onPress={aprobarDemo}>
+                  <Text style={s.demo}>Simular que el administrador la aprueba (solo en la demo)</Text>
+                </Pressable>
+              )}
+            </View>
+          ) : (
+            <Pressable style={s.enlace} onPress={solicitarEliminacion}>
+              <Ionicons name="trash-outline" size={20} color={color.rojo} />
+              <Text style={[s.enlaceTexto, { color: color.rojo }]}>Eliminar mi perfil</Text>
+              <Text style={s.notaCelular}>Requiere aprobación</Text>
+            </Pressable>
+          )}
+        </Permiso>
       </ScrollView>
     </SafeAreaView>
   );

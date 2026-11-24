@@ -11,10 +11,10 @@ import { INDICADORES } from '../config/indicadores';
 // Solo lee las jornadas que ya calcula la pantalla Historial: no cambia cómo se obtienen.
 export const FILTROS = [
   { id: 'resumen', texto: 'Resumen', icono: 'list' },
-  { id: 'horasExtra', texto: 'Horas extras', icono: 'moon' },
-  { id: 'km', texto: 'Kilometraje', icono: 'map' },
-  { id: 'eficiencia', texto: 'Eficiencia', icono: 'checkmark-done' },
-  { id: 'excesos', texto: 'Excesos de velocidad', icono: 'warning' },
+  { id: 'horasExtra', texto: 'Horas extras', icono: 'moon', permiso: 'historial.filtro.horasExtra' },
+  { id: 'km', texto: 'Kilometraje', icono: 'map', permiso: 'historial.filtro.km' },
+  { id: 'eficiencia', texto: 'Eficiencia', icono: 'checkmark-done', permiso: 'historial.filtro.eficiencia' },
+  { id: 'excesos', texto: 'Excesos de velocidad', icono: 'warning', permiso: 'historial.filtro.excesos' },
 ];
 
 const coma = (n) => String(n).replace('.', ',');

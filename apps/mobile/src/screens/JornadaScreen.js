@@ -19,7 +19,9 @@ import { eficienciaHoy, nivelEficiencia } from '../utils/eficiencia';
 import { nivelVelocidad } from '../utils/velocidad';
 import { useJornada } from '../hooks/useJornada';
 import { formatoKm } from '../utils/formato';
+import { Permiso, usePermisos } from '../context/PermisosContext';
 export default function JornadaScreen({ navigation }) {
+  const { puede } = usePermisos();
   const { yo, horario, hoy } = useJornada();
   const { franjas, conEstado, franjasRecordatorio, reportes, ahora, horaVerificada, desfaseMin } = useFranjasHoy();
   const cfg = api.getIndicadores();
@@ -49,7 +51,7 @@ export default function JornadaScreen({ navigation }) {
   useEffect(() => {
     prepararNotificaciones()
       .then((ok) => {
-        if (!ok) return;
+        if (!ok || !puede('reportes.enviar')) return; // sin permiso de reportes, sin recordatorios
         // Hoy y mañana, para que suene aunque el trabajador no abra la app mañana
         const manana = new Date(ahora);
         manana.setDate(manana.getDate() + 1);
@@ -98,18 +100,22 @@ export default function JornadaScreen({ navigation }) {
           <Text style={s.estadoNota}>El rastreo se apagará solo a las 5:00 p. m. No tienes que hacer nada.</Text>
         </View>
 
-        <TarjetaHorasExtra ahora={ahora} horaVerificada={horaVerificada} />
+        <Permiso clave="horasExtra.usar">
+          <TarjetaHorasExtra ahora={ahora} horaVerificada={horaVerificada} />
+        </Permiso>
 
-        <TarjetaReportes
-          franjas={franjas}
-          conEstado={conEstado}
-          reportes={reportes}
-          ahora={ahora}
-          horaVerificada={horaVerificada}
-          desfaseMin={desfaseMin}
-          onEnviar={abrirReporte}
-        />
-        {reportes.length > 0 && (
+        <Permiso clave="reportes.enviar">
+          <TarjetaReportes
+            franjas={franjas}
+            conEstado={conEstado}
+            reportes={reportes}
+            ahora={ahora}
+            horaVerificada={horaVerificada}
+            desfaseMin={desfaseMin}
+            onEnviar={abrirReporte}
+          />
+        </Permiso>
+        {puede('reportes.verDia') && reportes.length > 0 && (
           <Pressable
             style={s.verReportes}
             onPress={() => navigation.navigate('ReportesDia', { fecha: new Date().toISOString() })}
@@ -121,51 +127,61 @@ export default function JornadaScreen({ navigation }) {
 
         {/* Último envío, puntos sin enviar y batería solo los ve el administrador (panel web) */}
         <View style={s.grilla}>
-          <Dato
-            ancho={ancho}
-            icono="map"
-            valor={formatoKm(hoy.km)}
-            texto="Recorrido hoy"
-            detalle={`Desde las ${hoy.inicio}`}
-          />
-          <Dato
-            ancho={ancho}
-            icono="location"
-            valor={visitasHoy.length ? `${cumplidas}/${visitasHoy.length}` : '0'}
-            texto="Visitas hoy"
-            detalle={visitasHoy.length ? 'Cumplidas / programadas' : 'Sin visitas programadas'}
-          />
-          <Dato
-            ancho={ancho}
-            icono="checkmark-done"
-            tono={nivelEf}
-            valor={ef.pct == null ? '—' : `${ef.pct} %`}
-            texto="Eficiencia del día"
-            detalle={ef.esperados ? `${ef.enviados} de ${ef.esperados} reportes` : 'Aún sin reportes'}
-          />
-          <Dato
-            ancho={ancho}
-            icono="speedometer"
-            tono={
-              kmh == null
-                ? undefined
-                : { ...nivelVel, detalleColor: kmh > cfg.limiteVelocidad ? color.rojo : undefined }
-            }
-            valor={kmh == null ? '— km/h' : `${kmh} km/h`}
-            texto="Velocidad"
-            detalle={
-              errorGps ??
-              (kmh != null && kmh > cfg.limiteVelocidad ? 'Exceso registrado' : `Límite ${cfg.limiteVelocidad} km/h`)
-            }
-          />
+          <Permiso clave="jornada.indicador.recorrido">
+            <Dato
+              ancho={ancho}
+              icono="map"
+              valor={formatoKm(hoy.km)}
+              texto="Recorrido hoy"
+              detalle={`Desde las ${hoy.inicio}`}
+            />
+          </Permiso>
+          <Permiso clave="jornada.indicador.visitas">
+            <Dato
+              ancho={ancho}
+              icono="location"
+              valor={visitasHoy.length ? `${cumplidas}/${visitasHoy.length}` : '0'}
+              texto="Visitas hoy"
+              detalle={visitasHoy.length ? 'Cumplidas / programadas' : 'Sin visitas programadas'}
+            />
+          </Permiso>
+          <Permiso clave="jornada.indicador.eficiencia">
+            <Dato
+              ancho={ancho}
+              icono="checkmark-done"
+              tono={nivelEf}
+              valor={ef.pct == null ? '—' : `${ef.pct} %`}
+              texto="Eficiencia del día"
+              detalle={ef.esperados ? `${ef.enviados} de ${ef.esperados} reportes` : 'Aún sin reportes'}
+            />
+          </Permiso>
+          <Permiso clave="jornada.indicador.velocidad">
+            <Dato
+              ancho={ancho}
+              icono="speedometer"
+              tono={
+                kmh == null
+                  ? undefined
+                  : { ...nivelVel, detalleColor: kmh > cfg.limiteVelocidad ? color.rojo : undefined }
+              }
+              valor={kmh == null ? '— km/h' : `${kmh} km/h`}
+              texto="Velocidad"
+              detalle={
+                errorGps ??
+                (kmh != null && kmh > cfg.limiteVelocidad ? 'Exceso registrado' : `Límite ${cfg.limiteVelocidad} km/h`)
+              }
+            />
+          </Permiso>
         </View>
-        {resumen.max > 0 && (
+        {puede('jornada.indicador.velocidad') && resumen.max > 0 && (
           <Text style={s.resumenVel}>
             Hoy: velocidad promedio {resumen.promedio ?? '—'} km/h · máxima {resumen.max} km/h
           </Text>
         )}
 
-        <TarjetaVisitas ahora={ahora} navigation={navigation} />
+        <Permiso clave="visitas.ver">
+          <TarjetaVisitas ahora={ahora} navigation={navigation} />
+        </Permiso>
 
         <View style={s.aviso}>
           <Ionicons name="information-circle" size={18} color={color.ambar} />

@@ -4,6 +4,7 @@ import MapView from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { color } from '../theme/colors';
 import ComoLlegar from '../components/ComoLlegar';
+import { Permiso } from '../context/PermisosContext';
 import GeocercaEnMapa from '../components/GeocercaEnMapa';
 import { useVisitas } from '../context/VisitasContext';
 import { useMiUbicacion } from '../hooks/useMiUbicacion';
@@ -86,7 +87,9 @@ export default function UbicacionVisitaScreen({ route }) {
         </View>
 
         <View style={s.fila}>
-          <ComoLlegar destino={destino} />
+          <Permiso clave="visitas.comoLlegar">
+            <ComoLlegar destino={destino} />
+          </Permiso>
         </View>
         <Text style={s.nota}>
           {p.tipo === 'obra'

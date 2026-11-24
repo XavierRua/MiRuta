@@ -1,6 +1,7 @@
 // Capa de acceso a datos.
 // Hoy usa datos de ejemplo; cuando conectemos Supabase, solo cambia este archivo.
 import { INDICADORES } from '../config/indicadores';
+import { PERMISOS_POR_ROL } from '../config/permisos';
 import { programacionesEjemplo } from '../data/programacion';
 import {
   cuentasDemo,
@@ -37,6 +38,9 @@ export const api = {
   // Límite de velocidad y rangos de eficiencia que configura el administrador.
   // Con Supabase: select * from configuracion_empresa (los mismos valores del panel web).
   getIndicadores: () => INDICADORES,
+  // Permisos encendidos para el rol del usuario.
+  // Con Supabase: select permiso from permisos_rol where empresa_id = … and rol = … and activo (0012).
+  getPermisos: () => PERMISOS_POR_ROL.trabajador,
 
   // ---------- Documentos ----------
   // Adicionales (ARL, planilla, alturas, confinados, exámenes): los sube SST desde la web; aquí solo se leen.

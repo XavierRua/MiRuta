@@ -3,12 +3,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { color } from '../theme/colors';
 import { config } from '../config/app';
 import { useVisitas } from '../context/VisitasContext';
+import { usePermisos } from '../context/PermisosContext';
 import { api } from '../services/api';
 import { ESTADOS, TIPOS, estadoVisita, horaCorta, textoPermanencia } from '../utils/visitas';
 
 // "Visitas de hoy": solo lo que programó el administrador para hoy, con su estado
 export default function TarjetaVisitas({ ahora, navigation }) {
   const { visitasHoy, registros, simularCambioAdministrador } = useVisitas();
+  const { puede } = usePermisos();
   const fin = api.getHorarioDia(ahora)?.fin;
 
   return (
@@ -58,7 +60,7 @@ export default function TarjetaVisitas({ ahora, navigation }) {
         );
       })}
 
-      {visitasHoy.length > 1 && (
+      {puede('visitas.verTodasMapa') && visitasHoy.length > 1 && (
         <Pressable style={s.verTodas} onPress={() => navigation.navigate('VisitasMapa')}>
           <Ionicons name="map" size={16} color={color.primario} />
           <Text style={s.verTodasTexto}>Ver todas en el mapa</Text>

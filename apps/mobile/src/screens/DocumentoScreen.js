@@ -4,12 +4,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { color } from '../theme/colors';
 import TomarDocumento from '../components/TomarDocumento';
 import { useDocumentos } from '../context/DocumentosContext';
+import { usePermisos } from '../context/PermisosContext';
 import { fechaLarga } from '../utils/documentos';
 
 // Detalle de un documento: foto, vencimiento, estado y versiones anteriores.
 // Vehículo: el trabajador lo renueva con una foto nueva. Adicionales: solo lectura (los actualiza SST).
 export default function DocumentoScreen({ route }) {
   const { todos, guardarDocumento } = useDocumentos();
+  const { puede } = usePermisos();
   const doc = todos.find((d) => d.id === route.params.id);
   const [renovando, setRenovando] = useState(null); // { foto, vence } mientras renueva
   const [guardando, setGuardando] = useState(false);
@@ -85,6 +87,7 @@ export default function DocumentoScreen({ route }) {
 
       {/* Renovar un documento del vehículo */}
       {esVehiculo &&
+        puede('documentos.vehiculo.actualizar') &&
         (renovando ? (
           <>
             <TomarDocumento doc={doc} valor={renovando} onCambiar={setRenovando} />

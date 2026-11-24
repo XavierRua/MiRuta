@@ -19,6 +19,7 @@ import { hhmm } from '../utils/reportes';
 import { mismoDia } from '../utils/fechas';
 import { formatoDiaCorto, hoy, rangoDia, rangoMes, rangoSemana, validarRango } from '../utils/fechas';
 import FiltroHistorial, { FILTROS } from '../components/FiltroHistorial';
+import { usePermisos } from '../context/PermisosContext';
 
 // Cómo se muestra cada tipo de lugar (geocerca)
 const tipoLugar = {
@@ -30,6 +31,7 @@ const tipoLugar = {
 const atajos = { Día: rangoDia, Semana: rangoSemana, Mes: rangoMes };
 
 export default function HistorialScreen({ navigation }) {
+  const { puede } = usePermisos();
   const inicial = rangoSemana();
   const [desde, setDesde] = useState(inicial.desde);
   const [hasta, setHasta] = useState(inicial.hasta);
@@ -168,7 +170,7 @@ export default function HistorialScreen({ navigation }) {
 
         {/* Filtros del período: Resumen es lo de siempre; los demás muestran el total y el detalle por día */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filtros}>
-          {FILTROS.map((f) => (
+          {FILTROS.filter((f) => !f.permiso || puede(f.permiso)).map((f) => (
             <Pressable key={f.id} style={[s.filtro, filtro === f.id && s.filtroActivo]} onPress={() => setFiltro(f.id)}>
               <Ionicons name={f.icono} size={14} color={filtro === f.id ? '#fff' : color.suave} />
               <Text style={[s.filtroTexto, filtro === f.id && s.filtroTextoActivo]}>{f.texto}</Text>
@@ -267,7 +269,7 @@ export default function HistorialScreen({ navigation }) {
                   </Text>
                 </View>
                 {/* Visitas programadas por el administrador y su cumplimiento */}
-                {j.visitas.length > 0 && (
+                {puede('historial.visitas') && j.visitas.length > 0 && (
                   <View style={s.visitas}>
                     <Text style={s.visitasTitulo}>
                       <Ionicons name="flag" size={13} color={color.azul} /> Visitas programadas (
@@ -353,19 +355,21 @@ export default function HistorialScreen({ navigation }) {
                     ))}
                   </View>
                 )}
-                <Pressable
-                  style={s.reportes}
-                  onPress={() => navigation.navigate('ReportesDia', { fecha: j.fecha.toISOString() })}
-                >
-                  <Ionicons name="document-text-outline" size={16} color={color.primario} />
-                  <Text style={s.reportesTexto}>
-                    Reportes: {j.reportesEnviados} de {j.reportesEsperados}
-                    {j.reportesEsperados - j.reportesEnviados > 0 &&
-                      ` · ${j.reportesEsperados - j.reportesEnviados} no reportó`}
-                  </Text>
-                  <ChipEf pct={porcentaje(j.reportesEnviados, j.reportesEsperados)} />
-                  <Ionicons name="chevron-forward" size={16} color={color.suave} />
-                </Pressable>
+                {puede('historial.reportes') && (
+                  <Pressable
+                    style={s.reportes}
+                    onPress={() => navigation.navigate('ReportesDia', { fecha: j.fecha.toISOString() })}
+                  >
+                    <Ionicons name="document-text-outline" size={16} color={color.primario} />
+                    <Text style={s.reportesTexto}>
+                      Reportes: {j.reportesEnviados} de {j.reportesEsperados}
+                      {j.reportesEsperados - j.reportesEnviados > 0 &&
+                        ` · ${j.reportesEsperados - j.reportesEnviados} no reportó`}
+                    </Text>
+                    <ChipEf pct={porcentaje(j.reportesEnviados, j.reportesEsperados)} />
+                    <Ionicons name="chevron-forward" size={16} color={color.suave} />
+                  </Pressable>
+                )}
               </View>
             ))}
           </>

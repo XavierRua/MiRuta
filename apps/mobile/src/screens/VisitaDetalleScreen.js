@@ -6,6 +6,7 @@ import { useVisitas } from '../context/VisitasContext';
 import { useFranjasHoy } from '../hooks/useFranjasHoy';
 import MapaVisita from '../components/MapaVisita';
 import ComoLlegar from '../components/ComoLlegar';
+import { Permiso } from '../context/PermisosContext';
 import { api } from '../services/api';
 import { ESTADOS, TIPOS, destinoDe, estadoVisita, horaCorta, minutosEntre, textoPermanencia } from '../utils/visitas';
 
@@ -173,11 +174,15 @@ export default function VisitaDetalleScreen({ route, navigation }) {
           })
         )}
         <View style={s.botones}>
-          <Pressable style={s.botonSec} onPress={() => navigation.navigate('UbicacionVisita', { id: p.id })}>
-            <Ionicons name="map" size={18} color={color.primario} />
-            <Text style={s.botonSecTexto}>Ver ubicación</Text>
-          </Pressable>
-          <ComoLlegar destino={destinoDe(p, r)} />
+          <Permiso clave="visitas.verUbicacion">
+            <Pressable style={s.botonSec} onPress={() => navigation.navigate('UbicacionVisita', { id: p.id })}>
+              <Ionicons name="map" size={18} color={color.primario} />
+              <Text style={s.botonSecTexto}>Ver ubicación</Text>
+            </Pressable>
+          </Permiso>
+          <Permiso clave="visitas.comoLlegar">
+            <ComoLlegar destino={destinoDe(p, r)} />
+          </Permiso>
         </View>
       </View>
 
