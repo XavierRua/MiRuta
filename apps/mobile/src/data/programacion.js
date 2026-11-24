@@ -1,0 +1,62 @@
+// Visitas programadas por el administrador para este trabajador (ejemplo).
+// Con Supabase llegan del servidor (tablas programaciones y visitas, 0008).
+// tipo: 'ruta' (puntos en orden) · 'obra' (un lugar con radio) · 'zona' (área en el mapa)
+export const programacionesEjemplo = [
+  {
+    id: 'p1',
+    tipo: 'obra',
+    titulo: 'Supervisión Obra Torre Norte',
+    hora: '08:00',
+    puntos: [{ nombre: 'Obra Torre Norte', direccion: 'Cra. 52 #76-20, Medellín', lat: 6.2853, lng: -75.5651 }],
+    radio: 120,
+    area: [],
+    descripcion: 'Verificar avance de la obra y recibir material.',
+    repeticion: { tipo: 'lunes_viernes', dias: [] },
+    actualizado: '2026-11-03T08:00:00Z',
+  },
+  {
+    id: 'p2',
+    tipo: 'ruta',
+    titulo: 'Entregas Laureles',
+    hora: '09:30',
+    puntos: [
+      { nombre: 'Bodega central', direccion: 'Cl. 30 #65-10', lat: 6.2335, lng: -75.5847 },
+      { nombre: 'Cliente Laureles', direccion: 'Cq. 1 #74-30', lat: 6.2442, lng: -75.5899 },
+      { nombre: 'Droguería La 70', direccion: 'Cra. 70 #44-15', lat: 6.2524, lng: -75.5895 },
+    ],
+    radio: 80,
+    area: [],
+    descripcion: 'Entregar pedidos en el orden de la ruta. Pedir firma de recibido.',
+    repeticion: { tipo: 'semanal', dias: [1, 3, 5] },
+    actualizado: '2026-11-03T08:00:00Z',
+  },
+  {
+    id: 'p3',
+    tipo: 'zona',
+    titulo: 'Zona Centro – ventas',
+    hora: '13:00',
+    puntos: [],
+    radio: 0,
+    area: [
+      [6.256, -75.572],
+      [6.256, -75.561],
+      [6.244, -75.561],
+      [6.244, -75.572],
+    ],
+    descripcion: 'Visitar comercios de la zona y levantar pedidos.',
+    repeticion: { tipo: 'diaria', dias: [] },
+    actualizado: '2026-11-03T08:00:00Z',
+  },
+  {
+    id: 'p4',
+    tipo: 'obra',
+    titulo: 'Cliente Éxito Colombia',
+    hora: '15:30',
+    puntos: [{ nombre: 'Éxito Colombia', direccion: 'Cl. 10 #43A-30, Medellín', lat: 6.2087, lng: -75.5716 }],
+    radio: 150,
+    area: [],
+    descripcion: 'Reunión con el jefe de compras.',
+    repeticion: { tipo: 'lunes_viernes', dias: [] },
+    actualizado: '2026-11-20T10:00:00Z',
+  },
+];

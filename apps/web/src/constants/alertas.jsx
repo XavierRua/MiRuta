@@ -1,0 +1,37 @@
+// Cómo se muestra cada tipo de alerta: texto, ícono y color
+import {
+  FiLogOut,
+  FiPower,
+  FiBatteryCharging,
+  FiWifiOff,
+  FiMapPin,
+  FiClock,
+  FiZap,
+  FiAlertOctagon,
+  FiFileText,
+  FiBattery,
+  FiCheckSquare,
+  FiXSquare,
+  FiSmartphone,
+  FiLock,
+  FiMoon,
+} from 'react-icons/fi';
+
+export const alertaInfo = {
+  horas_extra_inicio: { texto: 'Inició horas extras', icono: <FiMoon />, clase: 'morado' },
+  horas_extra_fin: { texto: 'Finalizó horas extras', icono: <FiMoon />, clase: 'info' },
+  intento_otro_celular: { texto: 'Intento desde otro celular', icono: <FiSmartphone />, clase: 'danger' },
+  pin_bloqueado: { texto: 'App bloqueada por PIN', icono: <FiLock />, clase: 'danger' },
+  reporte_recibido: { texto: 'Reporte recibido', icono: <FiCheckSquare />, clase: 'ok' },
+  no_reporto: { texto: 'No reportó', icono: <FiXSquare />, clase: 'danger' },
+  salida_geocerca: { texto: 'Salida de geocerca', icono: <FiLogOut />, clase: 'morado' },
+  apagado_usuario: { texto: 'Apagado por la persona', icono: <FiPower />, clase: 'danger' },
+  apagado_bateria: { texto: 'Apagado por batería', icono: <FiBatteryCharging />, clase: 'warn' },
+  sin_reporte: { texto: 'Sin reporte', icono: <FiWifiOff />, clase: 'warn' },
+  gps_desactivado: { texto: 'GPS desactivado', icono: <FiMapPin />, clase: 'warn' },
+  rastreo_no_iniciado: { texto: 'Rastreo no iniciado', icono: <FiClock />, clase: 'warn' },
+  exceso_velocidad: { texto: 'Exceso de velocidad', icono: <FiZap />, clase: 'danger' },
+  ubicacion_falsa: { texto: 'Ubicación falsa', icono: <FiAlertOctagon />, clase: 'danger' },
+  documento_por_vencer: { texto: 'Documento por vencer', icono: <FiFileText />, clase: 'info' },
+  bateria_baja: { texto: 'Batería baja', icono: <FiBattery />, clase: 'warn' },
+};

@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "MiRuta",
+    "slug": "miruta",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "co.miruta.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM",
+        "CAMERA",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "co.miruta.app"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "MiRuta usa la cámara para las fotos y la selfie de tus reportes de actividad.",
+          "photosPermission": "MiRuta puede adjuntar fotos de la tarea a tus reportes."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "MiRuta registra tu ubicación en cada reporte y durante tu jornada."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#ea580c"
+        }
+      ],
+      "expo-secure-store"
+    ]
+  }
+}
