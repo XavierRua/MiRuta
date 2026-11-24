@@ -1,0 +1,223 @@
+import { aTextoFecha } from './fechas';
+
+// Datos del inicio/fin de jornada del trabajador: salud, preoperacional, pausas, incidentes, GPS apagados
+// y ausentismo. En la demo se inventan siempre iguales por trabajador y día; con Supabase salen de las
+// tablas de 0014 (reportes_salud, preoperacionales, pausas, incidentes, apagados_gps).
+const semilla = (t) => [...t].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 100003, 7);
+const hm = (min) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`;
+const FIN_JORNADA = 17 * 60;
+const TIPOS_VEH = { Moto: 'moto', Carro: 'carro', Camioneta: 'camion', Camion: 'camion' };
+
+export function generarNovedades(trabajadores, desde, hasta, apagadosManuales = [], vehiculos = []) {
+  const r = { salud: [], preoperacional: [], pausas: [], incidentes: [], apagados: [], notificaciones: [] };
+  const hoyTexto = aTextoFecha(new Date());
+  for (let d = new Date(desde); d <= hasta; d.setDate(d.getDate() + 1)) {
+    if (d.getDay() === 0) continue;
+    const fecha = new Date(d);
+    const f = aTextoFecha(fecha);
+    const esHoy = f === hoyTexto;
+    const sabado = fecha.getDay() === 6;
+    for (const t of trabajadores) {
+      if (t.estado === 'fuera_horario' && esHoy) continue;
+      const s = semilla(`${t.id}${f}`);
+      const persona = `${t.nombres} ${t.apellidos}`;
+      const base = { fecha, trabajadorId: t.id, persona };
+
+      // Salud al iniciar (y al terminar, salvo hoy)
+      const noApto = s % 100 < 4;
+      const llegaTarde = s % 100 >= 96; // diligenció después del límite → alerta "formularios pendientes"
+      const horaSalud = 7 * 60 + 3 + (s % 20) + (llegaTarde ? 40 : 0);
+      r.salud.push({
+        ...base,
+        momento: 'Inicio',
+        hora: hm(horaSalud),
+        animo: noApto ? 'Mal' : ['Bien', 'Bien', 'Regular'][s % 3],
+        apto: noApto ? 'No' : 'Sí',
+        medicamento: s % 23 === 0 ? 'Sí' : 'No',
+        observaciones: noApto ? 'Fiebre y dolor de cabeza desde anoche' : '',
+        alerta: noApto || s % 23 === 0,
+        tarde: llegaTarde,
+      });
+      if (!esHoy && !noApto)
+        r.salud.push({
+          ...base,
+          momento: 'Salida',
+          hora: hm((sabado ? 12 : 17) * 60 - 10 + (s % 9)),
+          animo: s % 31 === 0 ? 'Regular' : 'Bien',
+          apto: 'Sí',
+          medicamento: 'No',
+          observaciones: s % 31 === 0 ? 'Leve dolor de espalda' : '',
+          alerta: false,
+          tarde: false,
+        });
+
+      // Preoperacional
+      const veh = vehiculos.find((v) => v.placa === t.vehiculoPlaca);
+      const empresa = s % 9 === 0;
+      const fallas = s % 100 < 6 ? [['Frenos', 'Luces', 'Llantas'][s % 3]] : [];
+      if (!noApto)
+        r.preoperacional.push({
+          ...base,
+          hora: hm(horaSalud + 4),
+          uso: t.vehiculoPlaca ? (empresa ? 'Empresa' : 'Propio') : 'Sin vehículo',
+          placa: t.vehiculoPlaca ? (empresa ? 'KLM345' : t.vehiculoPlaca) : '—',
+          clase: empresa ? 'carro' : (TIPOS_VEH[veh?.tipo] ?? 'moto'),
+          fallas,
+          alerta: fallas.length > 0,
+        });
+
+      // Pausas
+      if (!noApto) {
+        const pausas = sabado
+          ? [['Desayuno', 9 * 60 + (s % 10), 15]]
+          : [
+              ['Pausa activa', 9 * 60 + (s % 9), 10],
+              ['Almuerzo', 12 * 60 + (s % 9), 60],
+              ...(s % 4 === 0 ? [['Otras: Capacitación', 14 * 60, 60]] : []),
+              ['Pausa activa', 15 * 60 + (s % 9), 10],
+            ];
+        for (const [tipo, ini, min] of pausas)
+          if (!esHoy || ini + min <= new Date().getHours() * 60 + new Date().getMinutes())
+            r.pausas.push({
+              ...base,
+              tipo,
+              inicio: hm(ini),
+              fin: hm(ini + min),
+              minutos: min,
+              cierre: s % 7 === 0 ? 'Manual' : 'Automático',
+            });
+      }
+
+      // Incidentes
+      if (!noApto && s % 100 >= 6 && s % 100 < 9) {
+        const ini = 10 * 60 + (s % 300);
+        r.incidentes.push({
+          ...base,
+          hora: hm(ini),
+          descripcion: ['Caída leve al bajar de la moto', 'Golpe con material en obra', 'Pinchazo de llanta en vía'][
+            s % 3
+          ],
+          fotos: s % 3,
+          puedeContinuar: s % 2 === 0,
+          ubicacion: `${(t.lat + (s % 7) * 0.001).toFixed(5)}, ${(t.lng - (s % 5) * 0.001).toFixed(5)}`,
+          minutos: ini,
+        });
+      }
+
+      // Notificaciones enviadas al celular y si el trabajador las marcó como leídas (y a qué hora)
+      const ahoraMin = new Date().getHours() * 60 + new Date().getMinutes();
+      const avisos = [
+        [
+          'Reportes',
+          'Te quedan 10 minutos',
+          'Envía tu reporte de 9:00 – 10:00 antes de que cierre la hora.',
+          9 * 60 + 50,
+        ],
+        ...(s % 5 === 0 ? [['Reportes', 'No reportaste', 'No enviaste el reporte de 11:00 – 12:00.', 12 * 60]] : []),
+        ...(s % 6 === 1
+          ? [
+              [
+                'Exceso de velocidad',
+                'Exceso de velocidad',
+                'Ibas a 74 km/h y el límite es 60 km/h.',
+                10 * 60 + (s % 50),
+              ],
+            ]
+          : []),
+        ...(s % 4 === 2
+          ? [['Visitas', 'Nueva visita asignada', 'Ferretería El Tornillo · llegada 14:30', 8 * 60 + (s % 40)]]
+          : []),
+        ...(s % 9 === 3
+          ? [['Visitas', 'Visita cancelada', 'Bodega Norte ya no está programada para hoy.', 11 * 60 + (s % 30)]]
+          : []),
+        ...(s % 17 === 0 ? [['Documentos', 'Documento próximo a vencer', 'Tu SOAT vence en 15 días.', 8 * 60]] : []),
+        ...(s % 13 === 5
+          ? [['Salida del área', 'Saliste del área asignada', 'Saliste de Obra Torre 3 a las 15:12.', 15 * 60 + 12]]
+          : []),
+      ];
+      for (const [tipo, titulo, mensaje, min] of avisos) {
+        if (esHoy && min > ahoraMin) continue;
+        const sinLeer = (s + min) % 10 === 0 || (esHoy && (s + min) % 3 === 0);
+        const tarda = 2 + ((s + min) % 50);
+        const leida = !sinLeer && (!esHoy || min + tarda <= ahoraMin);
+        r.notificaciones.push({
+          ...base,
+          enviada: hm(min),
+          minutos: min,
+          tipo,
+          titulo,
+          mensaje,
+          leida,
+          leidaA: leida ? hm(min + tarda) : null,
+          minutosParaLeer: leida ? tarda : null,
+        });
+      }
+
+      // GPS apagado manualmente tras una novedad (demo)
+      const inc = r.incidentes.find((i) => i.trabajadorId === t.id && aTextoFecha(i.fecha) === f && !i.puedeContinuar);
+      if (noApto || inc)
+        r.apagados.push({
+          ...base,
+          hora: hm(noApto ? horaSalud + 25 : inc.minutos + 30),
+          minutos: noApto ? horaSalud + 25 : inc.minutos + 30,
+          por: ['Laura Gómez (SST)', 'Jorge Pérez (Supervisor)'][s % 2],
+          motivo: noApto
+            ? 'Se verificó por teléfono: no está en condiciones de trabajar. Se remite a la EPS.'
+            : 'Incidente atendido: no puede continuar la jornada.',
+          origen: noApto ? 'Salud' : 'Incidente',
+        });
+    }
+  }
+  // Apagados hechos desde esta web (se suman a los de ejemplo)
+  for (const a of apagadosManuales) {
+    const fecha = new Date(a.hora);
+    if (fecha < desde || fecha > new Date(hasta.getTime() + 86399999)) continue;
+    const t = trabajadores.find((x) => x.id === a.trabajadorId);
+    if (!t) continue;
+    const min = fecha.getHours() * 60 + fecha.getMinutes();
+    r.apagados.unshift({
+      fecha: new Date(fecha.toDateString()),
+      trabajadorId: t.id,
+      persona: `${t.nombres} ${t.apellidos}`,
+      hora: hm(min),
+      minutos: min,
+      por: a.por,
+      motivo: a.motivo,
+      origen: 'Manual',
+    });
+  }
+  const orden = (a, b) => b.fecha - a.fecha || a.persona.localeCompare(b.persona);
+  Object.values(r).forEach((l) => l.sort(orden));
+  return r;
+}
+
+// Ausentismo: novedades que sacan al trabajador de la jornada (no apto, incidente que no le deja continuar,
+// GPS apagado manualmente) con las horas perdidas hasta el fin del horario
+export function ausentismo(n) {
+  const eventos = [
+    ...n.salud.filter((x) => x.apto === 'No').map((x) => ({ ...x, tipo: 'Salud: no apto', detalle: x.observaciones })),
+    ...n.incidentes
+      .filter((x) => !x.puedeContinuar)
+      .map((x) => ({ ...x, tipo: 'Incidente: no continúa', detalle: x.descripcion })),
+    ...n.apagados.map((x) => ({
+      ...x,
+      tipo: 'GPS apagado manualmente',
+      detalle: `${x.por}: ${x.motivo}`,
+      horasPerdidas: Math.max(0, Math.round(((FIN_JORNADA - x.minutos) / 60) * 10) / 10),
+    })),
+  ].sort((a, b) => b.fecha - a.fecha);
+  const porTrabajador = new Map();
+  eventos.forEach((e) => {
+    const r = porTrabajador.get(e.trabajadorId) ?? { persona: e.persona, eventos: 0, dias: new Set(), horas: 0 };
+    r.eventos += 1;
+    r.dias.add(aTextoFecha(e.fecha));
+    r.horas += e.horasPerdidas ?? 0;
+    porTrabajador.set(e.trabajadorId, r);
+  });
+  return {
+    eventos,
+    resumen: [...porTrabajador.values()]
+      .map((r) => ({ ...r, dias: r.dias.size, horas: Math.round(r.horas * 10) / 10 }))
+      .sort((a, b) => b.horas - a.horas),
+  };
+}

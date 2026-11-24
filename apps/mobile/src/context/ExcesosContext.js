@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
 import { api } from '../services/api';
+import { notificarAhora } from '../services/notificaciones';
 
 const ExcesosContext = createContext(null);
 const EPISODIO_MIN = 5; // si vuelve a pasar el límite antes de 5 min, es el mismo exceso
@@ -36,6 +37,12 @@ export function ExcesosProvider({ children }) {
     actual.current = nuevo;
     setExcesos((l) => [nuevo, ...l]);
     api.registrarExceso(nuevo).catch(() => {});
+    // Aviso al trabajador (también queda en la campana); uno por episodio, no por cada lectura
+    notificarAhora(
+      'Exceso de velocidad',
+      `Ibas a ${Math.round(kmh)} km/h y el límite es ${limite} km/h. Quedó registrado.`,
+      { tipo: 'exceso' },
+    ).catch(() => {});
   }, []);
 
   return <ExcesosContext.Provider value={{ excesos, registrarLectura }}>{children}</ExcesosContext.Provider>;

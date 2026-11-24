@@ -2,13 +2,17 @@ import { MapContainer, TileLayer, Marker, Circle, Polygon, Polyline, Tooltip } f
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { colorEstado } from '../constants/estados';
+import { MODOS, infoModo } from '../utils/desplazamiento';
 // Marcador con la foto del trabajador (o sus iniciales) y un borde del color de su estado
-function iconoTrabajador(t, seleccionado) {
+function iconoTrabajador(t, seleccionado, conModo) {
   const tam = seleccionado ? 54 : 44;
   const contenido = t.foto ? `<img src="${t.foto}" alt="" />` : `<span>${t.nombres[0]}${t.apellidos[0]}</span>`;
+  // Insignia con el modo de desplazamiento: 🚶 a pie · 🏍️/🚗 vehículo · ⏸️ quieto
+  const m = conModo ? infoModo(t.modo, t.vehiculoTipo) : null;
+  const insignia = m ? `<b class="modo" style="--m:${m.color}">${m.emoji}</b>` : '';
   return L.divIcon({
     className: '',
-    html: `<div class="marcador ${seleccionado ? 'sel' : ''}" style="--color:${colorEstado[t.estado]};width:${tam}px;height:${tam}px">${contenido}<i></i></div>`,
+    html: `<div class="marcador ${seleccionado ? 'sel' : ''}" style="--color:${colorEstado[t.estado]};width:${tam}px;height:${tam}px">${contenido}${insignia}<i></i></div>`,
     iconSize: [tam, tam + 8],
     iconAnchor: [tam / 2, tam + 8],
     tooltipAnchor: [0, -tam - 6],
@@ -22,6 +26,8 @@ export default function Mapa({
   onSeleccionar,
   centro = [6.2476, -75.573],
   zoom = 13,
+  tramos, // recorrido partido por modo: [{ modo, puntos }]
+  conModo = true, // permiso desplazamiento.ver
 }) {
   return (
     <MapContainer center={centro} zoom={zoom} className="mapa" scrollWheelZoom>
@@ -49,13 +55,27 @@ export default function Mapa({
         );
       })}
 
-      {recorrido && <Polyline positions={recorrido} pathOptions={{ color: '#ea580c', weight: 4 }} />}
+      {recorrido && !tramos && <Polyline positions={recorrido} pathOptions={{ color: '#ea580c', weight: 4 }} />}
+      {/* Recorrido con un color por modo: verde punteado a pie, azul en vehículo */}
+      {tramos?.map((tr, i) => (
+        <Polyline
+          key={`t${i}`}
+          positions={tr.puntos}
+          pathOptions={{
+            color: conModo ? (MODOS[tr.modo]?.color ?? '#ea580c') : '#ea580c',
+            weight: 4,
+            dashArray: conModo ? (MODOS[tr.modo]?.guiones ?? undefined) : undefined,
+          }}
+        >
+          {conModo && <Tooltip sticky>{MODOS[tr.modo]?.texto}</Tooltip>}
+        </Polyline>
+      ))}
 
       {trabajadores.map((t) => (
         <Marker
           key={t.id}
           position={[t.lat, t.lng]}
-          icon={iconoTrabajador(t, seleccionado === t.id)}
+          icon={iconoTrabajador(t, seleccionado === t.id, conModo)}
           zIndexOffset={seleccionado === t.id ? 1000 : 0}
           eventHandlers={{ click: () => onSeleccionar?.(t.id) }}
         >
@@ -65,6 +85,12 @@ export default function Mapa({
             </strong>
             <br />
             {t.vehiculoPlaca ?? 'Sin vehículo'} · {t.velocidad} km/h · {t.bateria} %
+            {conModo && t.modo && (
+              <>
+                <br />
+                {infoModo(t.modo, t.vehiculoTipo).emoji} {infoModo(t.modo, t.vehiculoTipo).texto}
+              </>
+            )}
           </Tooltip>
         </Marker>
       ))}

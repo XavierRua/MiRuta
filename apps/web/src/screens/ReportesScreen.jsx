@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import ExcluirHorasModal from '../components/ExcluirHorasModal';
+import { useNovedades } from '../context/NovedadesContext';
 import { FiCamera, FiDownload, FiExternalLink, FiMapPin } from 'react-icons/fi';
 import Avatar from '../components/Avatar';
 import Modal from '../components/Modal';
@@ -27,6 +29,8 @@ export default function ReportesScreen() {
   const [estado, setEstado] = useState('todos');
   const [visibles, setVisibles] = useState(POR_PAGINA);
   const [abierto, setAbierto] = useState(null);
+  const [excluyendo, setExcluyendo] = useState(false);
+  const { exclusiones, guardarExclusion, quitarExclusion } = useNovedades();
 
   // Validación del rango de fechas
   const error =
@@ -38,9 +42,25 @@ export default function ReportesScreen() {
           ? 'La fecha "Hasta" no puede ser anterior a "Desde".'
           : null;
 
+  // Las horas excluidas (capacitaciones) no se piden: se quitan de la lista y de los indicadores
+  const excluida = (r) =>
+    exclusiones.some((e) => {
+      const h = Number(r.franja.split(':')[0]);
+      return (
+        e.trabajadores.includes(r.trabajadorId) &&
+        e.fecha === aTexto(r.fecha) &&
+        h >= Number(e.desde.split(':')[0]) &&
+        h < Number(e.hasta.split(':')[0])
+      );
+    });
   const todos = useMemo(
-    () => (error ? [] : api.getReportes({ empresaId, trabajadorId, desde: aFecha(desde), hasta: aFecha(hasta) })),
-    [empresaId, trabajadorId, desde, hasta, error],
+    () =>
+      error
+        ? []
+        : api
+            .getReportes({ empresaId, trabajadorId, desde: aFecha(desde), hasta: aFecha(hasta) })
+            .filter((r) => !excluida(r)),
+    [empresaId, trabajadorId, desde, hasta, error, exclusiones],
   );
   const lista = estado === 'todos' ? todos : todos.filter((r) => r.estado === estado);
   const persona = (id) => trabajadores.find((t) => t.id === id);
@@ -91,7 +111,44 @@ export default function ReportesScreen() {
         <button className="btn">
           <FiDownload /> Excel
         </button>
+        {/* Permiso web.reportes.excluirHoras (administrador, supervisor, SST según configuración) */}
+        <button className="btn" onClick={() => setExcluyendo(true)}>
+          Excluir horas (capacitación)
+        </button>
       </div>
+
+      {exclusiones.length > 0 && (
+        <section className="panel">
+          <h2>Horas excluidas de los reportes ({exclusiones.length})</h2>
+          <ul className="lista-exclusiones">
+            {exclusiones.map((e) => (
+              <li key={e.id}>
+                <div>
+                  <strong>
+                    {new Date(`${e.fecha}T00:00`).toLocaleDateString('es-CO', {
+                      weekday: 'short',
+                      day: 'numeric',
+                      month: 'short',
+                    })}{' '}
+                    · {e.desde}–{e.hasta} · {e.motivo}
+                  </strong>
+                  <small className="bloque">
+                    {e.trabajadores.length === trabajadores.length
+                      ? 'Todos los trabajadores'
+                      : e.trabajadores.map((id) => persona(id)?.nombres).join(', ')}
+                  </small>
+                </div>
+                <button className="btn peq" onClick={() => quitarExclusion(e.id)}>
+                  Quitar
+                </button>
+              </li>
+            ))}
+          </ul>
+          <small className="nota">
+            Esas horas no se piden en la app y no cuentan como "No reportó" ni para la eficiencia.
+          </small>
+        </section>
+      )}
 
       {error ? (
         <div className="aviso error">{error}</div>
@@ -202,6 +259,16 @@ export default function ReportesScreen() {
           reporte={abierto}
           trabajador={persona(abierto.trabajadorId)}
           onCerrar={() => setAbierto(null)}
+        />
+      )}
+      {excluyendo && (
+        <ExcluirHorasModal
+          trabajadores={trabajadores}
+          onCerrar={() => setExcluyendo(false)}
+          onGuardar={(ex) => {
+            guardarExclusion(ex);
+            setExcluyendo(false);
+          }}
         />
       )}
     </div>

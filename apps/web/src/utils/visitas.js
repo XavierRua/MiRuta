@@ -66,15 +66,28 @@ function recorridoEjemplo(p, periodos, s) {
   const en = (k, ang) => [g.lat + Math.sin(ang) * grado * k, g.lng + Math.cos(ang) * grado * k];
   const lista = [en(3, s % 6)];
   const salidas = [];
+  // Tramos por modo: llega en vehículo, se mueve a pie dentro y sale como indique modoSalida
+  const tramos = [];
+  const agregar = (modo, puntos) => {
+    const ult = tramos[tramos.length - 1];
+    const desde = ult ? [ult.puntos[ult.puntos.length - 1]] : [lista[0]];
+    if (ult?.modo === modo) ult.puntos.push(...puntos);
+    else tramos.push({ modo, puntos: [...desde, ...puntos] });
+  };
   periodos.forEach((x, i) => {
-    lista.push(en(0.9, (s + i) % 6), en(0.4, (s + i * 2) % 6), en(0.2, (s + i * 3) % 6));
+    const dentro = [en(0.9, (s + i) % 6), en(0.4, (s + i * 2) % 6), en(0.2, (s + i * 3) % 6)];
+    agregar(x.modoEntrada ?? 'vehiculo', [dentro[0]]);
+    agregar('a_pie', dentro.slice(1));
+    lista.push(...dentro);
     if (x.salida) {
       const fuera = en(1.4, (s + i * 5) % 6);
+      const lejos = en(2.2, (s + i * 7) % 6);
       salidas.push(fuera);
-      lista.push(fuera, en(2.2, (s + i * 7) % 6));
+      agregar(x.modoSalida ?? 'vehiculo', [fuera, lejos]);
+      lista.push(fuera, lejos);
     }
   });
-  return { recorrido: lista, salidas };
+  return { recorrido: lista, salidas, tramos };
 }
 
 // Visitas (una por trabajador y día) con su resultado.
@@ -157,7 +170,13 @@ export function generarVisitas(programaciones, trabajadorIds, desde, hasta, ahor
               .map((x) => (x.salida > ahoraMin ? { ...x, salida: null } : x));
           }
         }
-        const { recorrido, salidas } = recorridoEjemplo(p, periodos, s);
+        // Cómo entró y salió (a pie o en vehículo) y cuánto tiempo estuvo dentro de cada forma
+        periodos = periodos.map((x, k) => ({
+          ...x,
+          modoEntrada: k === 0 ? 'vehiculo' : (s >> k) % 2 ? 'a_pie' : 'vehiculo',
+          modoSalida: x.salida == null ? null : (s >> (k + 1)) % 3 ? 'vehiculo' : 'a_pie',
+        }));
+        const { recorrido, salidas, tramos } = recorridoEjemplo(p, periodos, s);
         const totalMin = periodos.length
           ? periodos.reduce((tt, x) => tt + ((x.salida ?? ahoraMin) - x.entrada), 0)
           : null;
@@ -172,7 +191,18 @@ export function generarVisitas(programaciones, trabajadorIds, desde, hasta, ahor
             entrada: fmt(x.entrada),
             salida: x.salida == null ? null : fmt(x.salida),
             minutos: (x.salida ?? ahoraMin) - x.entrada,
+            modoEntrada: x.modoEntrada,
+            modoSalida: x.modoSalida,
           })),
+          // Minutos dentro de la geocerca: a pie, en vehículo y quieto
+          tiempos: totalMin
+            ? (() => {
+                const pie = Math.round(totalMin * (0.3 + (s % 30) / 100));
+                const veh = Math.round(totalMin * (0.04 + (s % 8) / 100));
+                return { a_pie: pie, vehiculo: veh, quieto: Math.max(0, totalMin - pie - veh) };
+              })()
+            : null,
+          tramos,
           // posibles alertas (se dejan solo si es su única visita del día, abajo)
           alertasSalida: periodos
             .map((x, k) => ({ x, k }))

@@ -15,6 +15,7 @@ import {
   recorridoEjemplo,
   trabajadores,
   vehiculos,
+  recorridoTramosEjemplo,
 } from '../data/mock';
 
 // Reportes esperados y enviados por trabajador y día (índice para calcular la eficiencia rápido)
@@ -31,7 +32,24 @@ const enRango = (fecha, desde, hasta) => fecha >= desde && fecha <= hasta;
 
 export const api = {
   getEmpresas: () => empresas,
-  getTrabajadores: (empresaId) => trabajadores.filter((t) => t.empresaId === empresaId),
+  // Cada trabajador con su modo de desplazamiento actual y el tipo de su vehículo (moto / carro).
+  // Con GPS real: el modo llega con cada punto (lo detecta la app con los pasos y la velocidad).
+  getTrabajadores: (empresaId) =>
+    trabajadores
+      .filter((t) => t.empresaId === empresaId)
+      .map((t) => ({
+        ...t,
+        vehiculoTipo: vehiculos.find((v) => v.placa === t.vehiculoPlaca)?.tipo ?? null,
+        modo:
+          t.modo ??
+          (['apagado', 'sin_reporte', 'fuera_horario'].includes(t.estado)
+            ? null
+            : t.velocidad >= 12
+              ? 'vehiculo'
+              : t.velocidad >= 2
+                ? 'a_pie'
+                : 'quieto'),
+      })),
   getVehiculos: (empresaId) => vehiculos.filter((v) => v.empresaId === empresaId),
   getGeocercas: () => geocercas,
   getEventosGeocerca: () => eventosGeocerca,
@@ -89,6 +107,7 @@ export const api = {
   },
   getJornadas: () => jornadasEjemplo,
   getRecorrido: () => recorridoEjemplo,
+  getRecorridoTramos: () => recorridoTramosEjemplo(),
   getHorarios: () => horarios,
   // Reportes de actividad filtrados por trabajador ('' = todos) y rango de fechas (ambas incluidas)
   getReportes: ({ empresaId, trabajadorId, desde, hasta }) => {

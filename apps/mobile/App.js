@@ -8,6 +8,9 @@ import { ReportesProvider } from './src/context/ReportesContext';
 import { ExcesosProvider } from './src/context/ExcesosContext';
 import { HorasExtraProvider } from './src/context/HorasExtraContext';
 import { VisitasProvider } from './src/context/VisitasContext';
+import { DesplazamientoProvider } from './src/context/DesplazamientoContext';
+import { JornadaDiaProvider } from './src/context/JornadaDiaContext';
+import { NotificacionesProvider } from './src/context/NotificacionesContext';
 import AppNavigator from './src/navigation/AppNavigator';
 
 export default function App() {
@@ -18,18 +21,24 @@ export default function App() {
       <PermisosProvider>
         <DocumentosProvider>
           <SesionProvider>
-            <ReportesProvider>
-              <ExcesosProvider>
-                <HorasExtraProvider>
-                  <VisitasProvider>
-                    <NavigationContainer>
-                      <StatusBar style="dark" />
-                      <AppNavigator />
-                    </NavigationContainer>
-                  </VisitasProvider>
-                </HorasExtraProvider>
-              </ExcesosProvider>
-            </ReportesProvider>
+            <JornadaDiaProvider>
+              <ReportesProvider>
+                <ExcesosProvider>
+                  <HorasExtraProvider>
+                    <DesplazamientoProvider>
+                      <VisitasProvider>
+                        <NotificacionesProvider>
+                          <NavigationContainer>
+                            <StatusBar style="dark" />
+                            <AppNavigator />
+                          </NavigationContainer>
+                        </NotificacionesProvider>
+                      </VisitasProvider>
+                    </DesplazamientoProvider>
+                  </HorasExtraProvider>
+                </ExcesosProvider>
+              </ReportesProvider>
+            </JornadaDiaProvider>
           </SesionProvider>
         </DocumentosProvider>
       </PermisosProvider>

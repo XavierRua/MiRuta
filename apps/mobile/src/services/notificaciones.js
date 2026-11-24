@@ -1,4 +1,5 @@
-// Notificaciones locales del reporte de actividad.
+// Notificaciones locales (reportes de actividad, visitas, documentos, pausas, excesos…).
+// Todas quedan además en la bandeja de la campana (services/bandeja.js).
 // Las programa el propio celular, así que suenan y vibran aunque la app esté cerrada o en segundo plano
 // (también sin internet). Las horas se calculan con la hora del servidor.
 import { Platform } from 'react-native';
@@ -6,6 +7,7 @@ import * as Notifications from 'expo-notifications';
 import { REPORTES } from '../config/reportes';
 import { hhmm } from '../utils/reportes';
 import { aRelojDelCelular, ahoraServidor } from './horaServidor';
+import { agregar, agregarPendiente, quitarPendientes } from './bandeja';
 
 // En Android el sonido y la vibración se definen en el "canal" y no se pueden cambiar después de crearlo;
 // por eso este canal tiene un nombre nuevo.
@@ -54,9 +56,10 @@ function contenido(titulo, cuerpo, datos) {
   };
 }
 
+// Toda notificación queda también en la bandeja de la campana: las programadas, cuando llega su hora
 async function programar(fechaServidor, titulo, cuerpo, datos) {
   if (fechaServidor <= ahoraServidor()) return null;
-  return Notifications.scheduleNotificationAsync({
+  const id = await Notifications.scheduleNotificationAsync({
     content: contenido(titulo, cuerpo, datos),
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -64,6 +67,32 @@ async function programar(fechaServidor, titulo, cuerpo, datos) {
       channelId: CANAL,
     },
   });
+  await agregarPendiente({
+    id,
+    tipo: datos?.tipo ?? 'aviso',
+    titulo,
+    cuerpo,
+    fecha: fechaServidor.toISOString(),
+    datos,
+  }).catch(() => {});
+  return id;
+}
+
+// Aviso inmediato: suena ya y entra a la bandeja
+async function inmediata(titulo, cuerpo, datos) {
+  const id = await Notifications.scheduleNotificationAsync({
+    content: contenido(titulo, cuerpo, datos),
+    trigger: Platform.OS === 'android' ? { channelId: CANAL } : null,
+  });
+  await agregar({
+    id: id ?? `n-${Date.now()}`,
+    tipo: datos?.tipo ?? 'aviso',
+    titulo,
+    cuerpo,
+    fecha: ahoraServidor().toISOString(),
+    datos,
+  }).catch(() => {});
+  return id;
 }
 
 // Programa, para cada hora sin reporte:
@@ -114,25 +143,22 @@ export async function programarRecordatorios(franjas, reportes) {
 
 // Al enviar un reporte: se cancelan sus recordatorios y suena la confirmación
 export async function cancelarRecordatorios(franjaId) {
-  await Promise.all((programadas[franjaId] ?? []).map((id) => Notifications.cancelScheduledNotificationAsync(id)));
+  const ids = programadas[franjaId] ?? [];
+  await Promise.all(ids.map((id) => Notifications.cancelScheduledNotificationAsync(id)));
+  await quitarPendientes({ ids }).catch(() => {});
   delete programadas[franjaId];
 }
 
 export async function notificarEnviado(etiqueta) {
-  await Notifications.scheduleNotificationAsync({
-    content: contenido('Reporte enviado', `Tu reporte de ${etiqueta} quedó registrado.`, { tipo: 'enviado' }),
-    trigger: Platform.OS === 'android' ? { channelId: CANAL } : null, // inmediata
-  });
+  await inmediata('Reporte enviado', `Tu reporte de ${etiqueta} quedó registrado.`, { tipo: 'enviado' });
 }
 
-// Aviso con sonido cuando el administrador asigna, cambia o cancela una visita.
+// Aviso con sonido cuando el administrador asigna, cambia o cancela una visita (tipo 'visita'),
+// o cuando sale del área de su única visita del día (tipo 'geocerca').
 // Con Supabase lo envía el servidor como notificación push; en la demo se genera aquí.
-export async function notificarVisita(titulo, cuerpo) {
+export async function notificarVisita(titulo, cuerpo, tipo = 'visita') {
   await prepararNotificaciones();
-  await Notifications.scheduleNotificationAsync({
-    content: contenido(titulo, cuerpo, { tipo: 'visita' }),
-    trigger: Platform.OS === 'android' ? { channelId: CANAL } : null,
-  });
+  await inmediata(titulo, cuerpo, { tipo });
 }
 
 // Cancela las notificaciones programadas de ciertos tipos (datos.tipo)
@@ -143,6 +169,7 @@ async function cancelarPorTipo(tipos) {
       .filter((n) => tipos.includes(n.content?.data?.tipo))
       .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
   );
+  await quitarPendientes({ tipos }).catch(() => {});
 }
 
 // Avisos de vencimiento de documentos: 15 días antes y el día que vence (a las 8:00 a. m.).
@@ -167,8 +194,38 @@ export async function programarAvisosDocumentos(docs, diasAviso) {
 
 // Aviso inmediato (por ejemplo, al abrir la app con un documento ya vencido)
 export async function notificarAhora(titulo, cuerpo, datos = {}) {
-  await Notifications.scheduleNotificationAsync({
-    content: contenido(titulo, cuerpo, datos),
-    trigger: Platform.OS === 'android' ? { channelId: CANAL } : null,
-  });
+  await inmediata(titulo, cuerpo, datos);
+}
+
+// Recordatorios de reportes de actividad: se cancelan cuando el supervisor / SST apaga el GPS
+export async function cancelarRecordatoriosReportes() {
+  await cancelarPorTipo(['reporte', 'no_reporto']);
+}
+
+// Alarma al terminar la pausa (suena aunque la app esté cerrada)
+export async function programarAlarmaPausa(pausa) {
+  await prepararNotificaciones();
+  await cancelarPorTipo(['fin_pausa']);
+  await programar(
+    new Date(pausa.finPrevisto),
+    `Terminó tu ${pausa.texto.toLowerCase()}`,
+    'Es hora de volver a tus actividades.',
+    {
+      tipo: 'fin_pausa',
+    },
+  );
+}
+export async function cancelarAlarmaPausa() {
+  await cancelarPorTipo(['fin_pausa']);
+}
+
+// Recordatorios de pausa activa cada N minutos dentro del horario
+export async function programarPausasActivas(inicio, fin, cadaMin) {
+  await prepararNotificaciones();
+  await cancelarPorTipo(['pausa_activa']);
+  for (let t = new Date(inicio.getTime() + cadaMin * 60000); t < fin; t = new Date(t.getTime() + cadaMin * 60000)) {
+    await programar(t, 'Hora de tu pausa activa', 'Estírate unos minutos. Márcala en Jornada → Pausas.', {
+      tipo: 'pausa_activa',
+    });
+  }
 }

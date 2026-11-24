@@ -1,0 +1,87 @@
+// Formularios del inicio y fin de jornada, pausas y reglas relacionadas.
+// Son los valores por defecto: con Supabase el administrador de cada empresa los configura desde la web
+// (Configuración → Formularios y pausas) y la app los lee al iniciar (tablas de la migración 0014).
+
+// Reporte de estado de salud (al iniciar y al terminar la jornada).
+// tipo: 'opciones' | 'si_no' | 'texto'. alertaSi: respuesta que genera una alerta inmediata.
+// clave 'apto' = "¿Estás en condiciones de trabajar?": si responde No, la novedad es "no apto".
+export const PREGUNTAS_SALUD = [
+  {
+    id: 'animo',
+    texto: '¿Cómo te sientes hoy?',
+    tipo: 'opciones',
+    opciones: ['Bien', 'Regular', 'Mal'],
+    alertaSi: 'Mal',
+  },
+  { id: 'apto', texto: '¿Estás en condiciones de trabajar?', tipo: 'si_no', alertaSi: 'No', obligatoria: true },
+  { id: 'dolor', texto: '¿Tienes algún dolor, malestar o lesión?', tipo: 'si_no' },
+  { id: 'medicamento', texto: '¿Tomaste algún medicamento que afecte tu atención?', tipo: 'si_no', alertaSi: 'Sí' },
+  { id: 'observaciones', texto: 'Observaciones (opcional)', tipo: 'texto', opcional: true },
+];
+
+// Preoperacional: lista de verificación del vehículo. aplica: tipos de vehículo donde se pregunta.
+// 'documentos' se revisa solo con los documentos del perfil (SOAT y técnico-mecánica vigentes).
+export const ITEMS_PREOPERACIONAL = [
+  { id: 'frenos', texto: 'Frenos', aplica: ['moto', 'carro', 'camion'] },
+  { id: 'luces', texto: 'Luces (altas, bajas, direccionales, stop)', aplica: ['moto', 'carro', 'camion'] },
+  { id: 'llantas', texto: 'Llantas (presión y desgaste)', aplica: ['moto', 'carro', 'camion'] },
+  { id: 'espejos', texto: 'Espejos', aplica: ['moto', 'carro', 'camion'] },
+  { id: 'pito', texto: 'Pito', aplica: ['moto', 'carro', 'camion'] },
+  { id: 'cadena', texto: 'Cadena y kit de arrastre', aplica: ['moto'] },
+  { id: 'casco', texto: 'Casco y chaleco reflectivo', aplica: ['moto'] },
+  { id: 'cinturones', texto: 'Cinturones de seguridad', aplica: ['carro', 'camion'] },
+  { id: 'botiquin', texto: 'Botiquín y extintor', aplica: ['carro', 'camion'] },
+  {
+    id: 'documentos',
+    texto: 'Documentos al día (SOAT y técnico-mecánica)',
+    aplica: ['moto', 'carro', 'camion'],
+    automatico: true,
+  },
+];
+
+// Pausas y descansos. Las configura en la web el administrador o los perfiles con el permiso
+// "web.pausas.configurar" (Configuración → Pausas y descansos del trabajador); la app las recibe como una lista
+// y arma las tarjetas con armarTiposPausa. Estas son las de ejemplo mientras no hay servidor.
+//   grupo: 'principal' = tarjeta propia · 'otras' = dentro de la tarjeta "Otras"
+//   duración: `minutos` o `horas` (se aceptan decimales: 1.5 = 1 h 30 min); la web envía duracion + unidad
+//   activo: false = no se muestra en la app
+export const PAUSAS_EJEMPLO = [
+  { id: 'desayuno', texto: 'Desayuno', icono: 'cafe', grupo: 'principal', minutos: 15 },
+  { id: 'almuerzo', texto: 'Almuerzo', icono: 'restaurant', grupo: 'principal', horas: 1 },
+  { id: 'pausa_activa', texto: 'Pausa activa', icono: 'body', grupo: 'principal', minutos: 10 },
+  { id: 'capacitacion', texto: 'Capacitación', icono: 'school', grupo: 'otras', horas: 1 },
+  { id: 'reunion', texto: 'Reunión', icono: 'people', grupo: 'otras', minutos: 30 },
+  { id: 'cita_medica', texto: 'Cita médica', icono: 'medkit', grupo: 'otras', horas: 5 },
+  { id: 'diligencia', texto: 'Diligencia autorizada', icono: 'document-text', grupo: 'otras', minutos: 30 },
+];
+
+// Duración de una pausa en minutos: { minutos }, { horas } o { duracion, unidad: 'min' | 'h' } (formato de la web)
+export const duracionMin = (p) =>
+  p.minutos ??
+  (p.duracion != null ? Math.round(p.unidad === 'h' ? p.duracion * 60 : p.duracion) : Math.round((p.horas ?? 0) * 60));
+
+// Lista de pausas (de la web o del servidor) → tarjetas de la app: las principales y, si hay, la tarjeta "Otras"
+export function armarTiposPausa(lista = []) {
+  const activas = lista.filter((p) => p.activo !== false).map((p) => ({ ...p, minutos: duracionMin(p) }));
+  const principales = activas.filter((p) => p.grupo !== 'otras');
+  const otras = activas.filter((p) => p.grupo === 'otras');
+  return otras.length
+    ? [...principales, { id: 'otra', texto: 'Otras', icono: 'ellipsis-horizontal-circle', opciones: otras }]
+    : principales;
+}
+
+export const TIPOS_PAUSA = armarTiposPausa(PAUSAS_EJEMPLO);
+
+// 30 → "30 min" · 60 → "1 h" · 90 → "1 h 30 min" · 300 → "5 h"
+export function textoDuracion(min) {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+export const REGLAS_JORNADA = {
+  pausaActivaCadaMin: 120, // recordatorio con sonido para hacer pausa activa cada 2 horas
+  limiteFormulariosMin: 30, // si a los 30 min del inicio no ha diligenciado salud y preoperacional: alerta
+  saludSalidaAntesMin: 30, // el reporte de salud de salida se habilita 30 min antes del fin del horario
+};

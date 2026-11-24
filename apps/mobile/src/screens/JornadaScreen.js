@@ -8,6 +8,14 @@ import Dato from '../components/Dato';
 import TarjetaReportes from '../components/TarjetaReportes';
 import TarjetaHorasExtra from '../components/TarjetaHorasExtra';
 import TarjetaVisitas from '../components/TarjetaVisitas';
+import TarjetaPausas from '../components/TarjetaPausas';
+import TarjetaIncidentes from '../components/TarjetaIncidentes';
+import { REGLAS_JORNADA } from '../config/formularios';
+import { enColombia } from '../utils/horaColombia';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useDesplazamiento } from '../context/DesplazamientoContext';
+import { useJornadaDia } from '../context/JornadaDiaContext';
+import { infoModo, kmTexto, textoMin } from '../utils/desplazamiento';
 import { useVisitas } from '../context/VisitasContext';
 import { estadoVisita } from '../utils/visitas';
 import { useFranjasHoy } from '../hooks/useFranjasHoy';
@@ -42,16 +50,29 @@ export default function JornadaScreen({ navigation }) {
     (p) => estadoVisita(p, registros[p.id], ahora, finHoy).estado === 'cumplida',
   ).length;
 
-  // Grilla: 2 columnas en celulares, 4 en pantallas anchas (tablet o celular horizontal)
+  // A pie / en vehículo / quieto: total del día y modo actual
+  const { modo, dia: desplazamiento, tipoVehiculo } = useDesplazamiento();
+  const modoActual = infoModo(modo, tipoVehiculo);
+  // Recorrido del día = solo lo que se movió en vehículo (lo caminado no cuenta).
+  // Por ahora se asume el vehículo asignado; cuando exista el preoperacional, el trabajador indicará
+  // cada día si usa su vehículo propio o uno de la empresa, y solo el propio cuenta para el rodamiento.
+  const kmTotal = desplazamiento.totales.vehiculo.km;
+  // Vehículo del día: lo indica el preoperacional (propio, de la empresa o ninguno)
+  const { dia: registrosDia, vehiculoDelDia, pausaActiva } = useJornadaDia();
+  const usoVehiculo = vehiculoDelDia?.uso ?? (api.getPerfil().vehiculo?.propio === false ? 'empresa' : 'propio');
+
+  // Grilla: 2 columnas en celulares, 3 en pantallas anchas (tablet o celular horizontal)
   const { width } = useWindowDimensions();
-  const columnas = width >= 560 ? 4 : 2;
+  const columnas = width >= 560 ? 3 : 2;
+  const horarioHoy = api.getHorarioDia(ahora);
   const ancho = Math.floor((width - 40 - 12 * (columnas - 1)) / columnas);
 
   // Recordatorios cada hora en este celular (se reprograman al enviar un reporte)
   useEffect(() => {
     prepararNotificaciones()
       .then((ok) => {
-        if (!ok || !puede('reportes.enviar')) return; // sin permiso de reportes, sin recordatorios
+        // sin permiso de reportes o con el GPS apagado por el supervisor / SST: sin recordatorios
+        if (!ok || !puede('reportes.enviar') || registrosDia.gpsApagado) return;
         // Hoy y mañana, para que suene aunque el trabajador no abra la app mañana
         const manana = new Date(ahora);
         manana.setDate(manana.getDate() + 1);
@@ -62,7 +83,7 @@ export default function JornadaScreen({ navigation }) {
         );
       })
       .catch(() => {});
-  }, [franjasRecordatorio.map((f) => f.id).join(','), reportes.length, horaVerificada]);
+  }, [franjasRecordatorio.map((f) => f.id).join(','), reportes.length, horaVerificada, !!registrosDia.gpsApagado]);
 
   const abrirReporte = (f) =>
     navigation.navigate('NuevoReporte', {
@@ -77,43 +98,95 @@ export default function JornadaScreen({ navigation }) {
       },
     });
   return (
-    <SafeAreaView style={s.fondo} edges={['top']}>
+    <SafeAreaView style={s.fondo} edges={[]}>
       <ScrollView contentContainerStyle={s.contenido}>
         <Text style={s.saludo}>Hola, {yo.nombres}</Text>
         <Text style={s.empresa}>{yo.empresa}</Text>
 
+        {/* GPS apagado por un perfil autorizado: la jornada queda cerrada */}
+        {registrosDia.gpsApagado && (
+          <View style={[s.estado, { backgroundColor: color.rojo }]}>
+            <View style={s.estadoFila}>
+              <Ionicons name="power" size={30} color="#fff" />
+              <View style={{ flex: 1 }}>
+                <Text style={s.estadoTitulo}>Jornada cerrada</Text>
+                <Text style={s.estadoSub}>
+                  {registrosDia.gpsApagado.por} ({registrosDia.gpsApagado.rol}) apagó tu GPS a las{' '}
+                  {new Date(registrosDia.gpsApagado.hora).toLocaleTimeString('es-CO', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
+                </Text>
+              </View>
+            </View>
+            <Text style={s.estadoNota}>Motivo: {registrosDia.gpsApagado.motivo}</Text>
+          </View>
+        )}
+
         {/* Estado del rastreo: automático, sin botones */}
-        <View style={s.estado}>
-          <View style={s.estadoFila}>
-            <View style={s.pulso}>
-              <View style={s.punto} />
+        {!registrosDia.gpsApagado && (
+          <View style={s.estado}>
+            <View style={s.estadoFila}>
+              <View style={s.pulso}>
+                <View style={s.punto} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.estadoTitulo}>Jornada activa</Text>
+                <Text style={s.estadoSub}>Compartiendo ubicación · automático</Text>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.estadoTitulo}>Jornada activa</Text>
-              <Text style={s.estadoSub}>Compartiendo ubicación · automático</Text>
+            <View style={s.horario}>
+              <Ionicons name="time-outline" size={16} color="#fff" />
+              <Text style={s.horarioTexto}>Horario de hoy: {horario.hoy}</Text>
             </View>
+            <Text style={s.estadoNota}>El rastreo se apagará solo a las 5:00 p. m. No tienes que hacer nada.</Text>
+            {pausaActiva && <Text style={s.estadoNota}>En pausa: {pausaActiva.texto.toLowerCase()}.</Text>}
           </View>
-          <View style={s.horario}>
-            <Ionicons name="time-outline" size={16} color="#fff" />
-            <Text style={s.horarioTexto}>Horario de hoy: {horario.hoy}</Text>
-          </View>
-          <Text style={s.estadoNota}>El rastreo se apagará solo a las 5:00 p. m. No tienes que hacer nada.</Text>
-        </View>
+        )}
 
         <Permiso clave="horasExtra.usar">
           <TarjetaHorasExtra ahora={ahora} horaVerificada={horaVerificada} />
         </Permiso>
 
-        <Permiso clave="reportes.enviar">
-          <TarjetaReportes
-            franjas={franjas}
-            conEstado={conEstado}
-            reportes={reportes}
-            ahora={ahora}
-            horaVerificada={horaVerificada}
-            desfaseMin={desfaseMin}
-            onEnviar={abrirReporte}
-          />
+        {/* Incidentes: debajo de horas extras */}
+        <Permiso clave="incidentes.reportar">
+          <TarjetaIncidentes navigation={navigation} />
+        </Permiso>
+
+        {!registrosDia.gpsApagado && (
+          <Permiso clave="pausas.usar">
+            <TarjetaPausas ahora={ahora} ancho={ancho} />
+          </Permiso>
+        )}
+
+        {/* Estado de salud de salida: se habilita 30 min antes del fin del horario */}
+        {puede('salud.reportar') &&
+          horarioHoy &&
+          !registrosDia.saludFin &&
+          ahora >=
+            new Date(enColombia(ahora, horarioHoy.fin).getTime() - REGLAS_JORNADA.saludSalidaAntesMin * 60000) && (
+            <Pressable style={s.salida} onPress={() => navigation.navigate('SaludSalida')}>
+              <Ionicons name="medkit" size={22} color={color.primario} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.salidaTitulo}>Reporte de salud de salida</Text>
+                <Text style={s.salidaSub}>Antes de terminar tu jornada, cuéntanos cómo te sientes.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={color.suave} />
+            </Pressable>
+          )}
+
+        <Permiso clave="reportes.enviar" sino={null}>
+          {!registrosDia.gpsApagado && (
+            <TarjetaReportes
+              franjas={franjas}
+              conEstado={conEstado}
+              reportes={reportes}
+              ahora={ahora}
+              horaVerificada={horaVerificada}
+              desfaseMin={desfaseMin}
+              onEnviar={abrirReporte}
+            />
+          )}
         </Permiso>
         {puede('reportes.verDia') && reportes.length > 0 && (
           <Pressable
@@ -125,17 +198,27 @@ export default function JornadaScreen({ navigation }) {
           </Pressable>
         )}
 
-        {/* Último envío, puntos sin enviar y batería solo los ve el administrador (panel web) */}
+        {/* Indicadores diarios: todos con el mismo diseño (círculo con ícono, valor, título y detalle).
+            Último envío, puntos sin enviar y batería solo los ve el administrador (panel web). */}
+        <View style={s.indicadoresCab}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.indicadoresTitulo}>Indicadores diarios</Text>
+            {puede('jornada.indicador.recorrido') && (
+              <Text style={s.indicadoresSub}>
+                {usoVehiculo === 'ninguno'
+                  ? `Hoy sin vehículo · desde las ${hoy.inicio}`
+                  : `Recorrido en vehículo ${usoVehiculo === 'propio' ? 'propio' : `de la empresa (${vehiculoDelDia?.placa ?? ''})`} ${formatoKm(kmTotal)} · desde las ${hoy.inicio}`}
+              </Text>
+            )}
+          </View>
+          {puede('desplazamiento.ver') && (
+            <View style={[s.ahora, { backgroundColor: modoActual.fondo }]}>
+              <MaterialCommunityIcons name={modoActual.icono} size={15} color={modoActual.color} />
+              <Text style={[s.ahoraTexto, { color: modoActual.color }]}>Ahora: {modoActual.texto.toLowerCase()}</Text>
+            </View>
+          )}
+        </View>
         <View style={s.grilla}>
-          <Permiso clave="jornada.indicador.recorrido">
-            <Dato
-              ancho={ancho}
-              icono="map"
-              valor={formatoKm(hoy.km)}
-              texto="Recorrido hoy"
-              detalle={`Desde las ${hoy.inicio}`}
-            />
-          </Permiso>
           <Permiso clave="jornada.indicador.visitas">
             <Dato
               ancho={ancho}
@@ -172,6 +255,24 @@ export default function JornadaScreen({ navigation }) {
               }
             />
           </Permiso>
+          {/* A pie / en vehículo / quieto (se detecta con los pasos del celular y la velocidad del GPS) */}
+          {puede('desplazamiento.ver') &&
+            ['a_pie', 'vehiculo', 'quieto'].map((k) => {
+              const m = infoModo(k, tipoVehiculo);
+              const t = desplazamiento.totales[k];
+              return (
+                <Dato
+                  key={k}
+                  ancho={ancho}
+                  familia="mci"
+                  icono={m.icono}
+                  tono={{ color: m.color, fondo: m.fondo }}
+                  valor={k === 'quieto' ? textoMin(t.seg) : kmTexto(t.km)}
+                  texto={m.texto}
+                  detalle={k === 'quieto' ? 'Sin moverse' : textoMin(t.seg)}
+                />
+              );
+            })}
         </View>
         {puede('jornada.indicador.velocidad') && resumen.max > 0 && (
           <Text style={s.resumenVel}>
@@ -194,6 +295,16 @@ export default function JornadaScreen({ navigation }) {
   );
 }
 const s = StyleSheet.create({
+  salida: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: color.primarioSuave,
+    borderRadius: 16,
+    padding: 16,
+  },
+  salidaTitulo: { fontWeight: '800', color: color.texto },
+  salidaSub: { color: color.suave, fontSize: 12, marginTop: 2 },
   verReportes: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: -4 },
   verReportesTexto: { color: color.primario, fontWeight: '600' },
   fondo: { flex: 1, backgroundColor: color.fondo },
@@ -225,6 +336,18 @@ const s = StyleSheet.create({
   estadoNota: { color: 'rgba(255,255,255,0.9)', fontSize: 13 },
   fila: { flexDirection: 'row', gap: 12 },
   grilla: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  indicadoresCab: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  indicadoresTitulo: { fontSize: 18, fontWeight: '800', color: color.texto },
+  indicadoresSub: { color: color.suave, fontSize: 12, marginTop: 2 },
+  ahora: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  ahoraTexto: { fontSize: 12, fontWeight: '700' },
   resumenVel: { color: color.suave, fontSize: 12, textAlign: 'center', marginTop: -4 },
   dato: { flex: 1, backgroundColor: color.tarjeta, borderRadius: 16, padding: 14, gap: 4 },
   datoValor: { fontSize: 20, fontWeight: '800', color: color.texto, marginTop: 4 },

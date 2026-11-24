@@ -1,6 +1,10 @@
 import { useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import MapView from 'react-native-maps';
+import MapView, { Marker } from 'react-native-maps';
+import MarcadorModo from '../components/MarcadorModo';
+import LeyendaDesplazamiento from '../components/LeyendaDesplazamiento';
+import { useDesplazamiento } from '../context/DesplazamientoContext';
+import { usePermisos } from '../context/PermisosContext';
 import { Ionicons } from '@expo/vector-icons';
 import { color } from '../theme/colors';
 import ComoLlegar from '../components/ComoLlegar';
@@ -14,6 +18,8 @@ import { TIPOS, centroDe, destinoDe, distanciaAlLugar, formatoDistancia } from '
 export default function UbicacionVisitaScreen({ route }) {
   const { visitasHoy, registros } = useVisitas();
   const { pos, error } = useMiUbicacion();
+  const { modo, tipoVehiculo } = useDesplazamiento();
+  const conModo = usePermisos().puede('desplazamiento.ver');
   const mapa = useRef(null);
   const p = visitasHoy.find((x) => x.id === route.params.id);
   if (!p)
@@ -52,6 +58,12 @@ export default function UbicacionVisitaScreen({ route }) {
         toolbarEnabled={false}
       >
         <GeocercaEnMapa p={p} conPines />
+        {/* El trabajador: caminando, en su moto/carro o quieto */}
+        {conModo && pos && (
+          <Marker coordinate={{ latitude: pos.lat, longitude: pos.lng }} anchor={{ x: 0.5, y: 0.5 }} title="Tú">
+            <MarcadorModo modo={modo} tipoVehiculo={tipoVehiculo} />
+          </Marker>
+        )}
       </MapView>
 
       <View style={s.panel}>
@@ -86,6 +98,7 @@ export default function UbicacionVisitaScreen({ route }) {
           </Text>
         </View>
 
+        {conModo && <LeyendaDesplazamiento tipoVehiculo={tipoVehiculo} conLinea={false} />}
         <View style={s.fila}>
           <Permiso clave="visitas.comoLlegar">
             <ComoLlegar destino={destino} />

@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import * as Location from 'expo-location';
 import { useExcesos } from '../context/ExcesosContext';
 import { useVisitas } from '../context/VisitasContext';
+import { useDesplazamiento } from '../context/DesplazamientoContext';
 import { INDICADORES } from '../config/indicadores';
 import { ahoraServidor } from '../services/horaServidor';
 
@@ -33,6 +34,7 @@ export function useVelocidad(activo) {
   const anterior = useRef(null);
   const { registrarLectura } = useExcesos();
   const { procesarUbicacion } = useVisitas();
+  const { registrarMovimiento } = useDesplazamiento();
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (e) => setEnPrimerPlano(e === 'active'));
@@ -53,8 +55,6 @@ export function useVelocidad(activo) {
           if (cancelado) return;
           setError(null);
           if ((pos.coords.accuracy ?? 0) > 50) return; // punto poco preciso: se ignora
-          // Llegada / salida de las visitas programadas (con la hora oficial)
-          procesarUbicacion({ coords: pos.coords, hora: ahoraServidor() });
 
           if (hoy.fecha !== new Date().toDateString())
             Object.assign(hoy, { fecha: new Date().toDateString(), max: 0, km: 0, horasMovimiento: 0 });
@@ -75,6 +75,11 @@ export function useVelocidad(activo) {
             }
           }
           anterior.current = pos;
+
+          // ¿A pie, en vehículo o quieto? Luego, llegada / salida de las visitas (con la hora oficial)
+          const hora = ahoraServidor();
+          const modo = registrarMovimiento({ coords: pos.coords, kmh: v ?? 0, hora });
+          procesarUbicacion({ coords: pos.coords, hora, modo });
           if (v == null) return;
 
           const redondeada = v < 3 ? 0 : Math.round(v); // por debajo de 3 km/h se considera detenido
@@ -100,7 +105,7 @@ export function useVelocidad(activo) {
       suscripcion?.remove();
       anterior.current = null;
     };
-  }, [activo, enPrimerPlano, registrarLectura, procesarUbicacion]);
+  }, [activo, enPrimerPlano, registrarLectura, procesarUbicacion, registrarMovimiento]);
 
   return { kmh, error, resumen };
 }

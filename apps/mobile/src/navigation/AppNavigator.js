@@ -1,6 +1,10 @@
 import { ActivityIndicator, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSesion } from '../context/SesionContext';
+import { useJornadaDia } from '../context/JornadaDiaContext';
+import InicioJornadaScreen from '../screens/InicioJornadaScreen';
+import SaludSalidaScreen from '../screens/SaludSalidaScreen';
+import NuevoIncidenteScreen from '../screens/NuevoIncidenteScreen';
 import { color } from '../theme/colors';
 import ActivacionScreen from '../screens/ActivacionScreen';
 import CrearPinScreen from '../screens/CrearPinScreen';
@@ -15,6 +19,10 @@ import UbicacionVisitaScreen from '../screens/UbicacionVisitaScreen';
 import VisitasMapaScreen from '../screens/VisitasMapaScreen';
 import DocumentosRegistroScreen from '../screens/DocumentosRegistroScreen';
 import DocumentoScreen from '../screens/DocumentoScreen';
+import NotificacionesScreen from '../screens/NotificacionesScreen';
+import SeguridadScreen from '../screens/SeguridadScreen';
+import CambiarPinScreen from '../screens/CambiarPinScreen';
+import LegalScreen from '../screens/LegalScreen';
 import TabsNavigator from './TabsNavigator';
 
 const Stack = createNativeStackNavigator();
@@ -32,8 +40,9 @@ const pantallaPorPaso = {
 
 export default function AppNavigator() {
   const { paso } = useSesion();
+  const { cargado, inicioCompleto } = useJornadaDia();
 
-  if (paso === 'cargando') {
+  if (paso === 'cargando' || (paso === 'listo' && !cargado)) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: color.fondo }}>
         <ActivityIndicator size="large" color={color.primario} />
@@ -47,6 +56,16 @@ export default function AppNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {paso !== 'listo' ? (
         <Stack.Screen name={nombre} component={Pantalla} />
+      ) : !inicioCompleto ? (
+        // Inicio de jornada obligatorio: salud + preoperacional antes de ver tareas y visitas
+        <>
+          <Stack.Screen name="InicioJornada" component={InicioJornadaScreen} />
+          <Stack.Screen
+            name="Autorizacion"
+            component={ConsentimientoScreen}
+            options={{ headerShown: true, title: 'Autorización de datos' }}
+          />
+        </>
       ) : (
         <>
           <Stack.Screen name="Principal" component={TabsNavigator} />
@@ -85,6 +104,33 @@ export default function AppNavigator() {
             component={DocumentoScreen}
             options={{ headerShown: true, title: 'Documento' }}
           />
+          <Stack.Screen
+            name="SaludSalida"
+            component={SaludSalidaScreen}
+            options={{ headerShown: true, title: 'Estado de salud de salida' }}
+          />
+          <Stack.Screen
+            name="NuevoIncidente"
+            component={NuevoIncidenteScreen}
+            options={{ headerShown: true, title: 'Reportar un incidente' }}
+          />
+          {/* Campana del encabezado y menú lateral (☰) */}
+          <Stack.Screen
+            name="Notificaciones"
+            component={NotificacionesScreen}
+            options={{ headerShown: true, title: 'Notificaciones' }}
+          />
+          <Stack.Screen
+            name="Seguridad"
+            component={SeguridadScreen}
+            options={{ headerShown: true, title: 'Seguridad' }}
+          />
+          <Stack.Screen
+            name="CambiarPin"
+            component={CambiarPinScreen}
+            options={{ headerShown: true, title: 'Cambiar contraseña' }}
+          />
+          <Stack.Screen name="Legal" component={LegalScreen} options={{ headerShown: true, title: '' }} />
         </>
       )}
     </Stack.Navigator>

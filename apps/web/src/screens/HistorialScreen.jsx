@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { FiDownload, FiAlertTriangle, FiEye, FiFlag } from 'react-icons/fi';
 import VisitaDetalleModal from '../components/VisitaDetalleModal';
 import FiltroHistorialAdmin from '../components/FiltroHistorialAdmin';
+import LeyendaDesplazamiento from '../components/LeyendaDesplazamiento';
+import { MODOS, emojiVehiculo, kmTexto, textoMin } from '../utils/desplazamiento';
 import { FILTROS } from '../utils/filtrosHistorial';
 import Mapa from '../components/Mapa';
 import ChipEficiencia from '../components/ChipEficiencia';
@@ -27,6 +29,7 @@ export default function HistorialScreen() {
   const todos = trab === 'todos'; // "Todos los trabajadores" (solo para los filtros)
   const t = lista.find((x) => x.id === trab) ?? lista[0];
   const error = validarRango(filtro.desde, filtro.hasta);
+  const vehiculoTipo = api.getVehiculos(empresaId).find((v) => v.placa === t?.vehiculoPlaca)?.tipo;
   // Días de todos los trabajadores o del elegido, para los filtros
   const diasFiltro = useMemo(
     () =>
@@ -179,82 +182,108 @@ export default function HistorialScreen() {
           <div className="hist-layout">
             <section className="panel">
               <h2>Jornadas</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Km</th>
-                    <th>Vel. prom.</th>
-                    <th>Vel. máx.</th>
-                    <th>Excesos</th>
-                    <th>Reportes</th>
-                    <th>Eficiencia</th>
-                    <th>Visitas</th>
-                    <th>Horas extras</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dias.map((d) => (
-                    <tr
-                      key={d.fecha.toISOString()}
-                      className={diaMapa === d ? 'fila-sel' : ''}
-                      onClick={() => setDiaMapa(d)}
-                    >
-                      <td>
-                        <strong>{fechaCorta(d.fecha)}</strong>
-                      </td>
-                      <td>{d.km.toFixed(1)}</td>
-                      <td>{d.velPromedio} km/h</td>
-                      <td className={d.velMax > indicadores.limiteVelocidad ? 'texto-danger' : ''}>{d.velMax} km/h</td>
-                      <td>{d.excesos.length ? <span className="chip danger">{d.excesos.length}</span> : '—'}</td>
-                      <td>
-                        {d.enviados}/{d.esperados}
-                      </td>
-                      <td>
-                        <ChipEficiencia pct={d.eficiencia} />
-                      </td>
-                      <td>
-                        {(() => {
-                          const v = visitasPorDia.get(aTextoFecha(d.fecha));
-                          return v ? (
+              <div className="tabla-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Km</th>
+                      <th className="nowrap">{MODOS.a_pie.emoji} A pie</th>
+                      <th className="nowrap">{emojiVehiculo(vehiculoTipo)} Vehículo</th>
+                      <th>Vel. prom.</th>
+                      <th>Vel. máx.</th>
+                      <th>Excesos</th>
+                      <th>Reportes</th>
+                      <th>Eficiencia</th>
+                      <th>Visitas</th>
+                      <th>Horas extras</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dias.map((d) => (
+                      <tr
+                        key={d.fecha.toISOString()}
+                        className={diaMapa === d ? 'fila-sel' : ''}
+                        onClick={() => setDiaMapa(d)}
+                      >
+                        <td>
+                          <strong>{fechaCorta(d.fecha)}</strong>
+                        </td>
+                        <td>{d.km.toFixed(1)}</td>
+                        <td className="nowrap">
+                          {d.desplazamiento ? (
                             <>
-                              <span className={`chip ${v.cumplidas === v.total ? 'ok' : 'naranja'}`}>
-                                {v.cumplidas}/{v.total}
-                              </span>
-                              {v.alertas > 0 && (
-                                <span className="chip danger" title="Salidas del área asignada">
-                                  <FiAlertTriangle /> {v.alertas}
-                                </span>
-                              )}
+                              {kmTexto(d.desplazamiento.a_pie.km)}
+                              <small className="bloque">{textoMin(d.desplazamiento.a_pie.min)}</small>
                             </>
                           ) : (
                             '—'
-                          );
-                        })()}
-                      </td>
-                      <td>
-                        {d.horasExtra ? (
-                          <span
-                            className="chip morado"
-                            title={`${d.horasExtra.km} km · reportes ${d.horasExtra.enviados}/${d.horasExtra.esperados}`}
-                          >
-                            {String(d.horasExtra.horas).replace('.', ',')} h{!d.horasExtra.fin && ' · en curso'}
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {dias.length === 0 && (
-                    <tr>
-                      <td colSpan={9} className="vacio">
-                        No hay jornadas en este periodo.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                          )}
+                        </td>
+                        <td className="nowrap">
+                          {d.desplazamiento ? (
+                            <>
+                              {kmTexto(d.desplazamiento.vehiculo.km)}
+                              <small className="bloque">{textoMin(d.desplazamiento.vehiculo.min)}</small>
+                            </>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td>{d.velPromedio} km/h</td>
+                        <td className={d.velMax > indicadores.limiteVelocidad ? 'texto-danger' : ''}>
+                          {d.velMax} km/h
+                        </td>
+                        <td>{d.excesos.length ? <span className="chip danger">{d.excesos.length}</span> : '—'}</td>
+                        <td>
+                          {d.enviados}/{d.esperados}
+                        </td>
+                        <td>
+                          <ChipEficiencia pct={d.eficiencia} />
+                        </td>
+                        <td>
+                          {(() => {
+                            const v = visitasPorDia.get(aTextoFecha(d.fecha));
+                            return v ? (
+                              <>
+                                <span className={`chip ${v.cumplidas === v.total ? 'ok' : 'naranja'}`}>
+                                  {v.cumplidas}/{v.total}
+                                </span>
+                                {v.alertas > 0 && (
+                                  <span className="chip danger" title="Salidas del área asignada">
+                                    <FiAlertTriangle /> {v.alertas}
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              '—'
+                            );
+                          })()}
+                        </td>
+                        <td>
+                          {d.horasExtra ? (
+                            <span
+                              className="chip morado"
+                              title={`${d.horasExtra.km} km · reportes ${d.horasExtra.enviados}/${d.horasExtra.esperados}`}
+                            >
+                              {String(d.horasExtra.horas).replace('.', ',')} h{!d.horasExtra.fin && ' · en curso'}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {dias.length === 0 && (
+                      <tr>
+                        <td colSpan={11} className="vacio">
+                          No hay jornadas en este periodo.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </section>
 
             <section className="panel">
@@ -329,7 +358,13 @@ export default function HistorialScreen() {
                 </ul>
               )}
               <div className="mapa-mini">
-                <Mapa recorrido={api.getRecorrido()} geocercas={api.getGeocercas()} centro={[t.lat, t.lng]} zoom={13} />
+                <Mapa
+                  tramos={api.getRecorridoTramos()}
+                  geocercas={api.getGeocercas()}
+                  centro={[t.lat, t.lng]}
+                  zoom={13}
+                />
+                <LeyendaDesplazamiento />
               </div>
               <small className="nota">
                 Recorrido de ejemplo. Con el GPS real se verá el recorrido de la jornada elegida.

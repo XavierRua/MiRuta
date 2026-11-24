@@ -6,6 +6,7 @@ import { color } from '../theme/colors';
 import JornadaScreen from '../screens/JornadaScreen';
 import HistorialScreen from '../screens/HistorialScreen';
 import PerfilScreen from '../screens/PerfilScreen';
+import Encabezado from '../components/Encabezado';
 
 const Tab = createBottomTabNavigator();
 
@@ -23,7 +24,9 @@ export default function TabsNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        headerShown: false,
+        // Encabezado igual en todas las pestañas: menú (☰), logo de la empresa y notificaciones
+        headerShown: true,
+        header: () => <Encabezado />,
         tabBarActiveTintColor: color.primario,
         tabBarInactiveTintColor: color.suave,
         tabBarStyle: {

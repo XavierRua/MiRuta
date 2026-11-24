@@ -10,7 +10,7 @@ create table permisos_catalogo (
 );
 
 insert into permisos_catalogo (clave, grupo, descripcion) values
-  ('jornada.indicador.recorrido', 'Jornada', 'Ver el indicador de recorrido (km) del día'),
+  ('jornada.indicador.recorrido', 'Jornada', 'Ver el recorrido del día en vehículo (km)'),
   ('jornada.indicador.visitas', 'Jornada', 'Ver el indicador de visitas del día'),
   ('jornada.indicador.eficiencia', 'Jornada', 'Ver el indicador de eficiencia del día'),
   ('jornada.indicador.velocidad', 'Jornada', 'Ver la velocidad actual y el resumen de velocidad'),

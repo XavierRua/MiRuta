@@ -7,6 +7,7 @@ import HistorialScreen from '../screens/HistorialScreen';
 import AlertasScreen from '../screens/AlertasScreen';
 import ReportesScreen from '../screens/ReportesScreen';
 import DesempenoScreen from '../screens/DesempenoScreen';
+import NovedadesScreen from '../screens/NovedadesScreen';
 import ProgramacionScreen from '../screens/ProgramacionScreen';
 import HorasExtraScreen from '../screens/HorasExtraScreen';
 import ConfiguracionScreen from '../screens/ConfiguracionScreen';
@@ -22,6 +23,7 @@ const pantallas = {
   reportes: ReportesScreen,
   desempeno: DesempenoScreen,
   programacion: ProgramacionScreen,
+  novedades: NovedadesScreen,
   horasExtra: HorasExtraScreen,
   configuracion: ConfiguracionScreen,
   horarios: HorariosScreen,

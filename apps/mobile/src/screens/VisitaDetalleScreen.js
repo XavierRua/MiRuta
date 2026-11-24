@@ -6,7 +6,10 @@ import { useVisitas } from '../context/VisitasContext';
 import { useFranjasHoy } from '../hooks/useFranjasHoy';
 import MapaVisita from '../components/MapaVisita';
 import ComoLlegar from '../components/ComoLlegar';
-import { Permiso } from '../context/PermisosContext';
+import { Permiso, usePermisos } from '../context/PermisosContext';
+import { useDesplazamiento } from '../context/DesplazamientoContext';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { infoModo, textoMin } from '../utils/desplazamiento';
 import { api } from '../services/api';
 import { ESTADOS, TIPOS, destinoDe, estadoVisita, horaCorta, minutosEntre, textoPermanencia } from '../utils/visitas';
 
@@ -21,6 +24,8 @@ const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 // Detalle de una visita programada: datos, ubicación en el mapa y registro de llegada/salida
 export default function VisitaDetalleScreen({ route, navigation }) {
   const { visitasHoy, registros, tolerancia, simularLlegada, simularSalida } = useVisitas();
+  const conModo = usePermisos().puede('desplazamiento.ver');
+  const { tipoVehiculo } = useDesplazamiento();
   const { ahora } = useFranjasHoy();
   const p = visitasHoy.find((x) => x.id === route.params.id);
 
@@ -107,6 +112,13 @@ export default function VisitaDetalleScreen({ route, navigation }) {
                 <Text style={s.periodoHora}>{horaCorta(x.entrada)}</Text>
                 <Ionicons name="log-out" size={15} color={x.salida ? color.rojo : color.suave} />
                 <Text style={s.periodoHora}>{x.salida ? horaCorta(x.salida) : 'dentro'}</Text>
+                {conModo && x.modoSalida && (
+                  <MaterialCommunityIcons
+                    name={infoModo(x.modoSalida, tipoVehiculo).icono}
+                    size={15}
+                    color={infoModo(x.modoSalida, tipoVehiculo).color}
+                  />
+                )}
                 <Text style={s.periodoDur}>{textoPermanencia(minutosEntre(x.entrada, x.salida ?? ahora))}</Text>
               </View>
             ))}
@@ -116,6 +128,26 @@ export default function VisitaDetalleScreen({ route, navigation }) {
               </Text>
             )}
           </View>
+        )}
+
+        {/* Tiempo dentro de la geocerca a pie, en vehículo y quieto */}
+        {conModo && v.tiempos && (
+          <View style={s.modos}>
+            {['a_pie', 'vehiculo', 'quieto'].map((k) => {
+              const m = infoModo(k, tipoVehiculo);
+              return (
+                <View key={k} style={s.modo}>
+                  <MaterialCommunityIcons name={m.icono} size={16} color={m.color} />
+                  <Text style={s.modoTexto}>
+                    {m.texto}: {textoMin(v.tiempos[k])}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
+        {conModo && v.periodos.some((x) => x.modoSalida) && (
+          <Text style={s.nota}>El ícono después de la hora de salida indica si salió a pie o en vehículo.</Text>
         )}
 
         {/* Alertas de salida del área (solo cuando es su única visita del día) */}
@@ -135,7 +167,11 @@ export default function VisitaDetalleScreen({ route, navigation }) {
         </Text>
         <MapaVisita p={p} periodos={v.periodos} recorrido={registros[p.id]?.recorrido ?? []} />
         {(registros[p.id]?.recorrido?.length ?? 0) > 1 && (
-          <Text style={s.nota}>Línea azul: recorrido realizado · verde: entradas · rojo: salidas.</Text>
+          <Text style={s.nota}>
+            {conModo
+              ? 'Recorrido: verde punteado a pie, azul en vehículo · pines verdes: entradas · rojos: salidas.'
+              : 'Línea azul: recorrido realizado · verde: entradas · rojo: salidas.'}
+          </Text>
         )}
       </View>
 
@@ -215,6 +251,9 @@ function Celda({ titulo, valor }) {
 }
 
 const s = StyleSheet.create({
+  modos: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  modo: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  modoTexto: { color: color.texto, fontSize: 13, fontWeight: '600' },
   botones: { flexDirection: 'row', gap: 10, marginTop: 4 },
   botonSec: {
     flex: 1,

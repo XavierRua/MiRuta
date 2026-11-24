@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { FiBattery, FiNavigation, FiAlertTriangle } from 'react-icons/fi';
 import Mapa from '../components/Mapa';
+import LeyendaDesplazamiento from '../components/LeyendaDesplazamiento';
+import { infoModo } from '../utils/desplazamiento';
 import Avatar from '../components/Avatar';
 import { estadoInfo } from '../constants/estados';
 import { useSesion } from '../context/SesionContext';
@@ -8,8 +10,15 @@ import { useEmpresa } from '../hooks/useEmpresa';
 import { api } from '../services/api';
 import { useConfig } from '../context/ConfigContext';
 import ChipEficiencia from '../components/ChipEficiencia';
+import ApagarGpsModal from '../components/ApagarGpsModal';
+import { useNovedades } from '../context/NovedadesContext';
+import { FiPower } from 'react-icons/fi';
 export default function MapaVivoScreen() {
-  const { irA } = useSesion();
+  const { apagados, apagarGps } = useNovedades();
+  const [apagando, setApagando] = useState(null);
+  const apagadoHoy = (id) =>
+    apagados.find((a) => a.trabajadorId === id && new Date(a.hora).toDateString() === new Date().toDateString());
+  const { irA, usuario } = useSesion();
   const { trabajadores: lista } = useEmpresa();
   const geocercas = api.getGeocercas();
   const { indicadores } = useConfig();
@@ -95,6 +104,7 @@ export default function MapaVivoScreen() {
 
         <section className="panel mapa-panel">
           <Mapa trabajadores={lista} geocercas={geocercas} seleccionado={sel} onSeleccionar={setSel} />
+          <LeyendaDesplazamiento flotante />
           {actual && (
             <div className="ficha-flotante">
               <div className="ficha-cab">
@@ -112,6 +122,12 @@ export default function MapaVivoScreen() {
               <dl>
                 <dt>Vehículo</dt>
                 <dd>{actual.vehiculoPlaca ?? '—'}</dd>
+                <dt>Desplazamiento</dt>
+                <dd>
+                  {actual.modo
+                    ? `${infoModo(actual.modo, actual.vehiculoTipo).emoji} ${infoModo(actual.modo, actual.vehiculoTipo).texto}`
+                    : '—'}
+                </dd>
                 <dt>
                   <FiNavigation /> Velocidad
                 </dt>
@@ -166,10 +182,36 @@ export default function MapaVivoScreen() {
               <button className="btn ancho" onClick={() => irA('historial')}>
                 Ver recorrido de hoy
               </button>
+              {/* Apagar GPS: administrador, supervisor y SST (permiso web.gps.apagar) */}
+              {apagadoHoy(actual.id) ? (
+                <div className="aviso error">
+                  GPS apagado por {apagadoHoy(actual.id).por} a las{' '}
+                  {new Date(apagadoHoy(actual.id).hora).toLocaleTimeString('es-CO', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
+                  . Motivo: {apagadoHoy(actual.id).motivo}
+                </div>
+              ) : (
+                <button className="btn ancho peligro" onClick={() => setApagando(actual)}>
+                  <FiPower /> Apagar GPS
+                </button>
+              )}
             </div>
           )}
         </section>
       </div>
+      {apagando && (
+        <ApagarGpsModal
+          trabajador={apagando}
+          usuario={usuario}
+          onCerrar={() => setApagando(null)}
+          onConfirmar={(r) => {
+            apagarGps(r);
+            setApagando(null);
+          }}
+        />
+      )}
     </div>
   );
 }

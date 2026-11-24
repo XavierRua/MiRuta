@@ -43,9 +43,19 @@ export function useFranjasHoy() {
   // En pantalla solo las que ya empezaron
   const extraVisibles = extraTodas.filter((f) => f.inicio <= ahora);
 
-  const franjas = [...normales, ...extraVisibles];
-  const conEstado = franjas.map((f) => ({ ...f, ...estadoFranja(f, reportes, ahora) }));
-  const franjasRecordatorio = [...normales, ...extraTodas];
+  // Horas que la empresa excluyó (capacitaciones): no se pueden enviar ni cuentan para la eficiencia
+  const exclusiones = api.getFranjasExcluidas();
+  const excluida = (f) =>
+    exclusiones.find((x) => f.inicio < new Date(x.hasta) && f.fin > new Date(x.desde) && !f.extra);
+
+  const todas = [...normales, ...extraVisibles];
+  const franjas = todas.filter((f) => !excluida(f)); // las que se reportan
+  const conEstado = todas.map((f) =>
+    excluida(f)
+      ? { ...f, estado: 'excluida', motivo: excluida(f).motivo }
+      : { ...f, ...estadoFranja(f, reportes, ahora) },
+  );
+  const franjasRecordatorio = [...normales, ...extraTodas].filter((f) => !excluida(f));
 
   return {
     franjas,

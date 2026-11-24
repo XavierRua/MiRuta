@@ -20,6 +20,10 @@ import { mismoDia } from '../utils/fechas';
 import { formatoDiaCorto, hoy, rangoDia, rangoMes, rangoSemana, validarRango } from '../utils/fechas';
 import FiltroHistorial, { FILTROS } from '../components/FiltroHistorial';
 import { usePermisos } from '../context/PermisosContext';
+import { useDesplazamiento } from '../context/DesplazamientoContext';
+import { useJornadaDia } from '../context/JornadaDiaContext';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { infoModo, kmTexto, textoMin } from '../utils/desplazamiento';
 
 // Cómo se muestra cada tipo de lugar (geocerca)
 const tipoLugar = {
@@ -32,6 +36,11 @@ const atajos = { Día: rangoDia, Semana: rangoSemana, Mes: rangoMes };
 
 export default function HistorialScreen({ navigation }) {
   const { puede } = usePermisos();
+  const { dia: desplazamientoHoy, tipoVehiculo } = useDesplazamiento();
+  const { dia: registrosHoy } = useJornadaDia();
+  const pausasHoy = registrosHoy.pausas
+    .filter((p) => p.fin)
+    .map((p) => ({ texto: p.texto, inicio: hhmm(new Date(p.inicio)), fin: hhmm(new Date(p.fin)) }));
   const inicial = rangoSemana();
   const [desde, setDesde] = useState(inicial.desde);
   const [hasta, setHasta] = useState(inicial.hasta);
@@ -84,13 +93,27 @@ export default function HistorialScreen({ navigation }) {
                   excesos: excesosHoy,
                   horasExtra: extraHoy ?? j.horasExtra,
                   visitas: visitasDeHoy,
+                  desplazamiento: desplazamientoHoy.totales,
+                  pausas: pausasHoy,
                 }
               : {
                   ...j,
                   visitas: visitasDeDiaAnterior(api.getProgramaciones(), j.fecha, api.getHorarioDia(j.fecha)?.fin),
                 },
           ),
-    [desde, hasta, error, hoyEf.enviados, hoyEf.esperados, excesosHoy, extraHoy?.horas, extraHoy?.fin, firmaVisitas],
+    [
+      desde,
+      hasta,
+      error,
+      hoyEf.enviados,
+      hoyEf.esperados,
+      excesosHoy,
+      extraHoy?.horas,
+      extraHoy?.fin,
+      firmaVisitas,
+      desplazamientoHoy,
+      pausasHoy.length,
+    ],
   );
   const enviadosPeriodo = jornadas.reduce((s, j) => s + j.reportesEnviados, 0);
   const esperadosPeriodo = jornadas.reduce((s, j) => s + j.reportesEsperados, 0);
@@ -120,7 +143,7 @@ export default function HistorialScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={s.fondo} edges={['top']}>
+    <SafeAreaView style={s.fondo} edges={[]}>
       <ScrollView contentContainerStyle={s.contenido}>
         <Text style={s.titulo}>Mi historial</Text>
 
@@ -259,6 +282,32 @@ export default function HistorialScreen({ navigation }) {
                     <Etiqueta key={l.nombre} lugar={l} />
                   ))}
                 </View>
+                {/* Desplazamiento del día: a pie y en vehículo */}
+                {puede('desplazamiento.ver') && j.desplazamiento && (
+                  <View style={s.desplazamiento}>
+                    {['a_pie', 'vehiculo'].map((k) => {
+                      const m = infoModo(k, tipoVehiculo);
+                      return (
+                        <View key={k} style={s.despItem}>
+                          <MaterialCommunityIcons name={m.icono} size={16} color={m.color} />
+                          <Text style={s.velTexto}>
+                            {m.texto}{' '}
+                            <Text style={s.velValor}>
+                              {kmTexto(j.desplazamiento[k].km)} · {textoMin(j.desplazamiento[k].seg)}
+                            </Text>
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+                {/* Pausas y descansos del día */}
+                {puede('pausas.usar') && j.pausas?.length > 0 && (
+                  <Text style={s.velTexto}>
+                    <Ionicons name="pause-circle" size={13} color={color.morado} />{' '}
+                    {j.pausas.map((p) => `${p.texto} ${p.inicio}–${p.fin}`).join(' · ')}
+                  </Text>
+                )}
                 {/* Velocidades guardadas al cerrar la jornada */}
                 <View style={s.velocidades}>
                   <Text style={s.velTexto}>
@@ -300,6 +349,12 @@ export default function HistorialScreen({ navigation }) {
                                 {v.periodos
                                   .map((x) => `${horaCorta(x.entrada)}–${x.salida ? horaCorta(x.salida) : 'dentro'}`)
                                   .join('  ·  ')}
+                              </Text>
+                            )}
+                            {puede('desplazamiento.ver') && v.tiempos && (
+                              <Text style={s.visitaTexto}>
+                                Dentro: a pie {textoMin(v.tiempos.a_pie)} · en vehículo {textoMin(v.tiempos.vehiculo)}
+                                {v.periodos.some((x) => x.modoSalida === 'a_pie') ? ' · salió a pie' : ''}
                               </Text>
                             )}
                             {v.alertasSalida.map((a, k) => (
@@ -397,6 +452,8 @@ function Etiqueta({ lugar }) {
 }
 
 const s = StyleSheet.create({
+  desplazamiento: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+  despItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   filtros: { gap: 8, paddingVertical: 2 },
   filtro: {
     flexDirection: 'row',

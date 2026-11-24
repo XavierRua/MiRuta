@@ -2,16 +2,19 @@
 // Hoy usa datos de ejemplo; cuando conectemos Supabase, solo cambia este archivo.
 import { INDICADORES } from '../config/indicadores';
 import { PERMISOS_POR_ROL } from '../config/permisos';
+import { ITEMS_PREOPERACIONAL, PREGUNTAS_SALUD, REGLAS_JORNADA, TIPOS_PAUSA } from '../config/formularios';
 import { programacionesEjemplo } from '../data/programacion';
 import {
   cuentasDemo,
   documentosAdicionales,
+  empresa,
   horario,
   horarioSemana,
   hoy,
   jornadas,
   reportesDeEjemplo,
   vehiculo,
+  vehiculosEmpresa,
   yo,
 } from '../data/mock';
 import { mismoDia, soloDia } from '../utils/fechas';
@@ -31,6 +34,9 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const api = {
   getPerfil: () => ({ yo, vehiculo, horario }),
+  // Empresa del trabajador. logoUrl lo sube el administrador desde la web (Configuración → Logo de la empresa);
+  // null = se muestra el logo de MiRuta. Con Supabase: empresas.logo_url (bucket público "logos", 0015).
+  getEmpresa: () => empresa,
   getJornadaHoy: () => hoy,
   // Horario que configuró el administrador para ese día (día de la semana en Colombia).
   // Con Supabase: horario asignado al trabajador > a su grupo > a la empresa (función fin_horario_hoy, 0007/0010).
@@ -41,6 +47,30 @@ export const api = {
   // Permisos encendidos para el rol del usuario.
   // Con Supabase: select permiso from permisos_rol where empresa_id = … and rol = … and activo (0012).
   getPermisos: () => PERMISOS_POR_ROL.trabajador,
+
+  // ---------- Inicio y fin de jornada ----------
+  // Preguntas, ítems y pausas que configura el administrador en la web. Con Supabase: tablas de 0014.
+  getFormularios: () => ({
+    preguntasSalud: PREGUNTAS_SALUD,
+    itemsPreoperacional: ITEMS_PREOPERACIONAL,
+    // Con Supabase: armarTiposPausa(filas de tipos_pausa), tal como las dejó configuradas la web
+    tiposPausa: TIPOS_PAUSA,
+    reglas: REGLAS_JORNADA,
+  }),
+  // Vehículos de la empresa que puede usar (para el preoperacional)
+  getVehiculosEmpresa: () => vehiculosEmpresa,
+  // Horas de reporte que la empresa excluyó (capacitaciones): no cuentan para la eficiencia
+  getFranjasExcluidas: () => [],
+  // Estado de la jornada que puede cambiar desde la web (p. ej. el supervisor apagó el GPS).
+  // Con Supabase: suscripción en tiempo real a la tabla apagados_gps.
+  getEstadoJornada: async () => null,
+  // Con Supabase: inserts en reportes_salud, preoperacionales, pausas e incidentes; el servidor crea las
+  // alertas con sonido para el administrador, el supervisor y SST (triggers de 0014).
+  enviarFormulario: async (tipo, datos) => {
+    await espera(400);
+    console.log('[demo] formulario', tipo, datos?.alerta ? '→ ALERTA' : '');
+    return { ...datos, recibidoEn: new Date().toISOString() };
+  },
 
   // ---------- Documentos ----------
   // Adicionales (ARL, planilla, alturas, confinados, exámenes): los sube SST desde la web; aquí solo se leen.
@@ -167,5 +197,15 @@ export const api = {
 
   avisarAdministrador: async (tipo, cuenta, dispositivo) => {
     console.log('[demo] alerta al administrador:', tipo, cuenta?.cedula ?? '', dispositivo?.modelo ?? '');
+  },
+
+  // Bandeja de notificaciones. Con Supabase: tabla notificaciones_trabajador (0015).
+  // Cada notificación que llega al celular queda registrada (entregada) y, al marcarla como leída, se guarda la hora:
+  // en la web se ve quién la leyó y cuándo.
+  registrarNotificacion: async (n) => {
+    console.log('[demo] notificación entregada:', n.tipo, n.titulo);
+  },
+  marcarNotificacionesLeidas: async (ids, leidaEn) => {
+    console.log('[demo] notificaciones leídas:', ids.length, leidaEn);
   },
 };

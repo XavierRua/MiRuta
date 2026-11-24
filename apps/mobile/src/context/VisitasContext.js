@@ -3,32 +3,40 @@ import { CLAVES, guardar, leer } from '../services/almacen';
 import { ahoraServidor } from '../services/horaServidor';
 import { notificarVisita } from '../services/notificaciones';
 import { api } from '../services/api';
-import { centroDe, dentroDePoligono, distanciaM, ocurreHoy } from '../utils/visitas';
+import { centroDe, dentroDeGeocerca, distanciaM, fueraDeGeocerca, ocurreHoy } from '../utils/visitas';
 
 const VisitasContext = createContext(null);
-const MARGEN_SALIDA_M = 30; // para salir de una obra hay que alejarse 30 m más que el radio (evita "temblores" del GPS)
-const LECTURAS_PARA_SALIR = 2; // y estar afuera en 2 lecturas seguidas
+const VERSION = 2; // registros con entradas y salidas separadas
+const MARGEN_SALIDA_RUTA_M = 30;
+const MAX_PUNTOS_RECORRIDO = 600;
 
-const registroVacio = (p) => ({
-  programacionId: p.id,
-  llegada: null,
-  salida: null,
-  fuera: 0,
-  puntos: p.tipo === 'ruta' ? p.puntos.map(() => ({ llegada: null, salida: null })) : [],
-});
+const registroVacio = (p) =>
+  p.tipo === 'ruta'
+    ? { programacionId: p.id, puntos: p.puntos.map(() => ({ llegada: null, salida: null })), recorrido: [] }
+    : {
+        programacionId: p.id,
+        periodos: [],
+        fuera: null,
+        alertasSalida: [],
+        recorrido: [],
+        tiempos: { a_pie: 0, vehiculo: 0, quieto: 0 }, // segundos dentro de la geocerca por modo
+        ultimaLectura: null,
+      };
 
-// Visitas programadas de hoy y su cumplimiento (llegada, salida y permanencia) según el GPS.
+// Visitas programadas de hoy y su registro automático por geocerca (entradas, salidas y tiempo dentro).
+// El trabajador no puede editar estos registros: solo los escribe el GPS (y con Supabase, el servidor).
 export function VisitasProvider({ children }) {
   const [programaciones, setProgramaciones] = useState(api.getProgramaciones());
   const [registros, setRegistros] = useState({});
   const registrosRef = useRef({});
+  const ultimoGuardado = useRef(0);
   const hoyTexto = ahoraServidor().toDateString();
+  const tolerancia = api.getIndicadores().toleranciaSalidaMin;
 
-  // Carga lo registrado hoy (se guarda en el celular para no perderlo al cerrar la app)
   useEffect(() => {
     leer(CLAVES.visitas)
       .then((g) => {
-        if (g?.fecha === hoyTexto) {
+        if (g?.fecha === hoyTexto && g.version === VERSION) {
           registrosRef.current = g.registros;
           setRegistros(g.registros);
         }
@@ -47,7 +55,7 @@ export function VisitasProvider({ children }) {
       const actual = visitasHoy.map((p) => ({ id: p.id, titulo: p.titulo, hora: p.hora, actualizado: p.actualizado }));
       const antes = await leer(CLAVES.visitasAsignadas);
       await guardar(CLAVES.visitasAsignadas, actual);
-      if (!antes) return; // primera vez: no se avisa
+      if (!antes) return;
       for (const v of actual) {
         const previa = antes.find((x) => x.id === v.id);
         if (!previa) await notificarVisita('Nueva visita asignada', `${v.titulo} · llegada estimada ${v.hora}`);
@@ -66,62 +74,147 @@ export function VisitasProvider({ children }) {
   const persistir = (nuevos) => {
     registrosRef.current = nuevos;
     setRegistros(nuevos);
-    guardar(CLAVES.visitas, { fecha: hoyTexto, registros: nuevos }).catch(() => {});
+    guardar(CLAVES.visitas, { fecha: hoyTexto, version: VERSION, registros: nuevos }).catch(() => {});
   };
 
-  // ---- Cada lectura de GPS: ¿llegó o salió de algún lugar? ----
+  // ---- Salidas confirmadas: lleva fuera de la geocerca más que la tolerancia ----
+  // La hora de salida es el momento en que salió (no cuando se confirmó).
+  const confirmarSalidas = useCallback(
+    (base, ahora) => {
+      let nuevos = null;
+      for (const p of visitasHoy) {
+        const r = base[p.id];
+        if (p.tipo === 'ruta' || !r?.fuera) continue;
+        if (ahora - new Date(r.fuera.desde) < tolerancia * 60000) continue;
+        nuevos = nuevos ?? { ...base };
+        const periodos = r.periodos.map((x, i) =>
+          i === r.periodos.length - 1
+            ? {
+                ...x,
+                salida: r.fuera.desde,
+                lugarSalida: { lat: r.fuera.lat, lng: r.fuera.lng },
+                modoSalida: r.fuera.modo ?? null, // salió a pie, en vehículo…
+              }
+            : x,
+        );
+        let alertasSalida = r.alertasSalida;
+        // Alerta solo si es la única visita del día (si tiene más, se entiende que va hacia la siguiente)
+        // y si salió dentro de su jornada (al terminarla es normal irse).
+        const fin = api.getHorarioDia(ahora)?.fin;
+        const salida = new Date(r.fuera.desde);
+        if (visitasHoy.length === 1 && (fin == null || salida.getHours() < fin)) {
+          const alerta = { hora: r.fuera.desde, lat: r.fuera.lat, lng: r.fuera.lng };
+          alertasSalida = [...alertasSalida, alerta];
+          notificarVisita(
+            'Saliste del área asignada',
+            `Saliste de ${p.titulo} a las ${String(salida.getHours()).padStart(2, '0')}:${String(salida.getMinutes()).padStart(2, '0')}. Se avisó al administrador.`,
+            'geocerca',
+          ).catch(() => {});
+          api.alertarSalidaArea({ programacionId: p.id, titulo: p.titulo, ...alerta }).catch(() => {});
+        }
+        nuevos[p.id] = { ...r, periodos, fuera: null, alertasSalida };
+        api.registrarVisita(nuevos[p.id]).catch(() => {});
+      }
+      return nuevos;
+    },
+    [visitasHoy, tolerancia],
+  );
+
+  // Revisa cada 20 s: así la salida se registra aunque el GPS deje de mandar puntos
+  useEffect(() => {
+    const id = setInterval(() => {
+      const n = confirmarSalidas(registrosRef.current, ahoraServidor());
+      if (n) persistir(n);
+    }, 20000);
+    return () => clearInterval(id);
+  }, [confirmarSalidas]);
+
+  // ---- Cada lectura de GPS: ¿entró o salió de alguna geocerca? ----
   const procesarUbicacion = useCallback(
-    ({ coords, hora }) => {
+    ({ coords, hora, modo = 'quieto' }) => {
       const pos = { lat: coords.latitude, lng: coords.longitude };
       const t = hora.toISOString();
+      let nuevos = { ...registrosRef.current };
       let cambio = false;
-      const nuevos = { ...registrosRef.current };
 
       for (const p of visitasHoy) {
         let c = false;
         const r = { ...(nuevos[p.id] ?? registroVacio(p)) };
+
         if (p.tipo === 'ruta') {
           r.puntos = r.puntos.map((x) => ({ ...x }));
-          // Llegada al siguiente punto de la ruta (en orden)
           const i = r.puntos.findIndex((x) => !x.llegada);
           if (i >= 0 && distanciaM(pos, p.puntos[i]) <= p.radio) {
             r.puntos[i].llegada = t;
-            r.llegada = r.llegada ?? t;
             c = true;
           }
-          // Salida del último punto alcanzado
           const ult = r.puntos.reduce((k, x, idx) => (x.llegada ? idx : k), -1);
-          if (ult >= 0 && !r.puntos[ult].salida && distanciaM(pos, p.puntos[ult]) > p.radio + MARGEN_SALIDA_M) {
+          if (ult >= 0 && !r.puntos[ult].salida && distanciaM(pos, p.puntos[ult]) > p.radio + MARGEN_SALIDA_RUTA_M) {
             r.puntos[ult].salida = t;
-            if (ult === r.puntos.length - 1) r.salida = t;
             c = true;
           }
         } else {
-          const dentro = p.tipo === 'zona' ? dentroDePoligono(pos, p.area) : distanciaM(pos, p.puntos[0]) <= p.radio;
-          const lejos = p.tipo === 'zona' ? !dentro : distanciaM(pos, centroDe(p)) > p.radio + MARGEN_SALIDA_M;
-          if (dentro) {
-            if (!r.llegada || r.salida || r.fuera) c = true;
-            if (!r.llegada) r.llegada = t;
-            r.salida = null; // si volvió a entrar, la permanencia sigue contando
-            r.fuera = 0;
-          } else if (r.llegada && !r.salida && lejos) {
-            r.fuera += 1;
-            if (r.fuera >= LECTURAS_PARA_SALIR) r.salida = t;
+          r.periodos = [...r.periodos];
+          const ultimo = r.periodos[r.periodos.length - 1];
+          const abierto = !!ultimo && !ultimo.salida;
+          // Tiempo dentro de la geocerca según cómo se mueve (a pie, en vehículo o quieto)
+          if (abierto && !r.fuera && r.ultimaLectura) {
+            const seg = Math.min((hora - new Date(r.ultimaLectura)) / 1000, 120);
+            const tiempos = r.tiempos ?? { a_pie: 0, vehiculo: 0, quieto: 0 };
+            if (seg > 0) r.tiempos = { ...tiempos, [modo]: (tiempos[modo] ?? 0) + seg };
+          }
+          r.ultimaLectura = t;
+          nuevos[p.id] = r; // los tiempos se actualizan siempre, pero se guardan en el celular cada 30 s
+          if (dentroDeGeocerca(p, pos)) {
+            if (!abierto) {
+              r.periodos.push({ entrada: t, salida: null, modoEntrada: modo }); // nueva entrada (a pie o en vehículo)
+              c = true;
+            }
+            if (r.fuera) {
+              r.fuera = null; // volvió antes de la tolerancia: era un salto del GPS o una salida corta
+              c = true;
+            }
+          } else if (abierto && !r.fuera && fueraDeGeocerca(p, pos)) {
+            r.fuera = { desde: t, lat: pos.lat, lng: pos.lng, modo }; // posible salida: se confirma tras la tolerancia
             c = true;
           }
         }
+
+        // Recorrido para el mapa: desde la primera entrada, un punto cada 10 m
+        const empezo = p.tipo === 'ruta' ? r.puntos.some((x) => x.llegada) : r.periodos.length > 0;
+        const ultimoPunto = r.recorrido[r.recorrido.length - 1];
+        if (
+          empezo &&
+          r.recorrido.length < MAX_PUNTOS_RECORRIDO &&
+          (!ultimoPunto || distanciaM(ultimoPunto, pos) >= 10)
+        ) {
+          r.recorrido = [...r.recorrido, { lat: pos.lat, lng: pos.lng, t, m: modo }];
+          c = true;
+        }
+
         if (c) {
           cambio = true;
           nuevos[p.id] = r;
-          if (r.llegada || r.salida) api.registrarVisita(r).catch(() => {});
+          api.registrarVisita(r).catch(() => {});
         }
       }
-      if (cambio) persistir(nuevos);
+      const confirmados = confirmarSalidas(nuevos, hora);
+      if (confirmados) {
+        nuevos = confirmados;
+        cambio = true;
+      }
+      if (cambio || Date.now() - ultimoGuardado.current > 30000) {
+        ultimoGuardado.current = Date.now();
+        persistir(nuevos);
+      } else {
+        registrosRef.current = nuevos; // sin escribir en el almacenamiento (ahorra batería)
+        setRegistros(nuevos);
+      }
     },
-    [visitasHoy],
+    [visitasHoy, confirmarSalidas],
   );
 
-  // ---- Solo para probar la demo ----
+  // ---- Solo modo demo (pruebas sin moverse); no existen en la versión real ----
   const simularLlegada = (p) => {
     const c =
       p.tipo === 'ruta'
@@ -129,9 +222,10 @@ export function VisitasProvider({ children }) {
         : centroDe(p);
     procesarUbicacion({ coords: { latitude: c.lat, longitude: c.lng }, hora: ahoraServidor() });
   };
-  const simularSalida = () => {
-    for (let k = 0; k < LECTURAS_PARA_SALIR; k++)
-      procesarUbicacion({ coords: { latitude: 6.0, longitude: -75.0 }, hora: ahoraServidor() });
+  const simularSalida = (p) => {
+    const c = centroDe(p);
+    const lejos = p.tipo === 'zona' ? Math.max(...p.area.map((v) => v[0])) + 0.002 : c.lat + (p.radio + 120) / 111320;
+    procesarUbicacion({ coords: { latitude: lejos, longitude: c.lng }, hora: ahoraServidor() });
   };
   const simularCambioAdministrador = () =>
     setProgramaciones((lista) =>
@@ -149,7 +243,15 @@ export function VisitasProvider({ children }) {
 
   return (
     <VisitasContext.Provider
-      value={{ visitasHoy, registros, procesarUbicacion, simularLlegada, simularSalida, simularCambioAdministrador }}
+      value={{
+        visitasHoy,
+        registros,
+        tolerancia,
+        procesarUbicacion,
+        simularLlegada,
+        simularSalida,
+        simularCambioAdministrador,
+      }}
     >
       {children}
     </VisitasContext.Provider>

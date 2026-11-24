@@ -109,3 +109,38 @@
 - El administrador de cada empresa los enciende o apaga por rol desde la web (tabla `permisos_rol`), sin cambiar el código.
 - No son permisos (siempre están): la autorización de datos (Ley 1581), cerrar sesión, el estado del rastreo y el registro de documentos del vehículo.
 - Regla para cada función nueva: agregar su clave al catálogo (app y 0012) y envolverla con `<Permiso clave="…">` o `puede('…')`.
+
+## A pie, en vehículo o quieto
+
+- La app combina los **pasos del podómetro** (sensor del celular, gratis y de muy bajo consumo; `expo-sensors`) con la **velocidad del GPS**: 40 pasos/min o más y menos de 9 km/h = a pie; 12 km/h o más = vehículo; sin pasos y menos de 2 km/h = quieto.
+- **Sin cambios falsos**: un cambio solo se acepta si se sostiene (a pie 40 s, vehículo 20 s, quieto 60 s). Un vehículo detenido sin pasos (semáforo, trancón) sigue siendo "vehículo" hasta 3 minutos.
+- **Batería**: el podómetro solo se escucha mientras hay GPS y se apaga 60 s después de la última lectura; no pide puntos de GPS adicionales. Los tiempos dentro de las geocercas se guardan en el celular cada 30 s, no en cada lectura.
+- **Mapa**: 🚶 a pie, 🏍️/🚗 según el vehículo asignado, ⏸️ quieto; la línea del recorrido va verde punteada a pie y azul en vehículo, con leyenda.
+- **Registro**: por jornada, km y tiempo a pie y en vehículo; por geocerca de visita, minutos a pie / en vehículo / quieto y cómo entró y salió (también si salió a pie).
+- **Permiso**: `desplazamiento.ver`.
+- **Pendiente con la app instalable (Día 5)**: el reconocimiento de actividad del sistema (Activity Recognition de Android y Core Motion de iPhone) necesita un módulo nativo; se sumará al clasificador como una señal más. Mientras tanto, el podómetro + GPS ya distinguen los tres casos.
+
+## Inicio de jornada, pausas, incidentes y ausentismo
+
+> "Supervisor" = Jefe de servicio técnico (el nombre final se define con los perfiles de la web).
+
+- **Inicio obligatorio**: al abrir la app el trabajador llena el **estado de salud** y luego el **preoperacional** (vehículo propio, de la empresa o ninguno). Hasta terminar no ve tareas ni visitas, pero el **GPS arranca igual** a la hora de inicio del horario. Si a los 30 min (configurable) no los ha llenado: alerta al administrador, supervisor y SST.
+- **Estado de salud** al inicio y al final (desde 30 min antes del fin). Preguntas configurables en la web. "No apto" → alerta con sonido a administrador, supervisor y SST, que pueden apagarle el GPS. Ver las respuestas es un permiso aparte (`web.salud.verRespuestas`): son datos sensibles (Ley 1581), se necesita la autorización del trabajador y revisión legal antes de producción.
+- **Preoperacional**: lista configurable por tipo de vehículo (moto, carro, camión); un ítem "Mal" exige observación y alerta al supervisor y administrador. **Pico y placa**: los días se configuran en Mi perfil (vehículo propio) o en la web (vehículos de la empresa); ese día el vehículo no puede salir. El vehículo elegido define el ícono y los km del recorrido.
+- **Pausas**: desayuno, almuerzo, pausa activa y otras (capacitaciones, reuniones). Se cierran solas al cumplir el tiempo configurado, con alarma. Recordatorio de pausa activa cada 2 horas (configurable). Quedan en el historial y en los informes de la web. **Se configuran en la web** (Configuración → Pausas y descansos del trabajador): nombre, ícono, grupo (tarjeta propia o dentro de "Otras"), duración en minutos u horas, activa o no, y cada cuánto se recuerda la pausa activa. Lo puede hacer el administrador y los perfiles a los que les encienda el permiso `web.pausas.configurar` (por defecto SST).
+- **Incidentes**: tarjeta debajo de horas extras. Descripción, fotos opcionales, si puede continuar; fecha, hora y GPS automáticos. Alerta con sonido.
+- **Apagado manual del GPS**: solo perfiles con `web.gps.apagar`; comentario obligatorio (mínimo 15 caracteres); queda quién, cuándo y por qué. Cierra la jornada del trabajador y detiene los recordatorios de reportes.
+- **Horas excluidas**: desde Reportes, los perfiles con `web.reportes.excluirHoras` excluyen un rango (p. ej. capacitación); esas horas no se piden ni afectan la eficiencia.
+- **Ausentismo**: menú "Novedades y ausentismo" de la web, por trabajador y período, descargable en Excel o PDF.
+- **Permisos** (cada uno se enciende por rol): app `salud.reportar`, `preoperacional.diligenciar`, `perfil.picoPlaca.editar`, `pausas.usar`, `incidentes.reportar`; web `web.configuracion.general`, `web.pausas.configurar`, `web.salud.verRespuestas`, `web.preoperacional.ver`, `web.pausas.ver`, `web.incidentes.ver`, `web.gps.apagar`, `web.ausentismo.ver`, `web.reportes.excluirHoras`, `web.formularios.configurar`.
+- **Servidor**: migración 0014.
+
+## Encabezado de la app: logo, notificaciones y menú
+
+- **Encabezado igual en todas las pestañas**: menú (☰) a la izquierda, logo de la empresa y campana de notificaciones a la derecha.
+- **Logo de la empresa**: lo sube o cambia el administrador en la web (Configuración → Logo de la empresa; permiso `web.empresa.logo`). PNG, JPG, WEBP o SVG de máximo 1 MB. Si la empresa no tiene logo, la app muestra el de MiRuta.
+- **Campana**: contador de notificaciones sin leer; la lista va de la más reciente a la más antigua, con filtro "Sin leer" y "Marcar todas como leídas". Llegan todas: recordatorios y estado de los reportes, excesos de velocidad, visitas asignadas/modificadas/canceladas, documentos por vencer o vencidos, salida del área de la única visita del día, pausas y cierre de la jornada. Los avisos programados en el celular (p. ej. "Te quedan 10 minutos") entran a la lista cuando llega su hora; si se cancelan (envió el reporte), no aparecen.
+- **Constancia de lectura**: al marcarla como leída se guarda la hora en el servidor (la pone el servidor, no el celular, y no se puede cambiar). En la web: Novedades y ausentismo → Notificaciones (enviadas, leídas, sin leer, % de lectura y tiempo para leerlas), con descarga en Excel o PDF. Permiso `web.notificaciones.ver`.
+- **Menú lateral (☰)**: arriba "Seguridad" (cambiar contraseña = PIN, y eliminar la cuenta, que salió de Mi perfil); abajo Política de privacidad, Términos y condiciones, Tratamiento de datos personales y Cerrar sesión (también salió de Mi perfil). Pie: Xavier Rúa Domínguez · Medellín, Colombia · xavier.rua@gmail.com · © Todos los derechos reservados · Versión (se toma sola de `app.json`).
+- **Permisos de la app**: `notificaciones.ver`, `seguridad.cambiarPin`, `perfil.solicitarEliminacion`.
+- **Servidor**: migración 0015.

@@ -135,6 +135,7 @@ export function estadoVisita(p, r, ahora, finJornadaHora) {
     puntosTotal: null,
     periodos,
     alertasSalida: r?.alertasSalida ?? [],
+    tiempos: r?.tiempos ?? null, // segundos dentro de la geocerca: { a_pie, vehiculo, quieto }
     dentro: abierto && !r?.fuera,
     fuera: abierto ? (r?.fuera ?? null) : null,
   };
@@ -194,14 +195,27 @@ export function visitasDeDiaAnterior(programaciones, fecha, finJornadaHora = 17)
       const sale = 60 + (sem % 150);
       const vuelve = sale + 15 + (sem % 40);
       if (sem % 3 === 0 && vuelve < finMin - 30)
-        periodos.push({ entrada: iso(0), salida: iso(sale) }, { entrada: iso(vuelve), salida: iso(finMin) });
-      else periodos.push({ entrada: iso(0), salida: iso(finMin) });
+        periodos.push(
+          { entrada: iso(0), salida: iso(sale), modoEntrada: 'vehiculo', modoSalida: sem % 2 ? 'a_pie' : 'vehiculo' },
+          {
+            entrada: iso(vuelve),
+            salida: iso(finMin),
+            modoEntrada: sem % 2 ? 'a_pie' : 'vehiculo',
+            modoSalida: 'vehiculo',
+          },
+        );
+      else periodos.push({ entrada: iso(0), salida: iso(finMin), modoEntrada: 'vehiculo', modoSalida: 'vehiculo' });
     } else {
       // Varias visitas: 1 a 3 periodos en cada una (salió y volvió a entrar)
       let t = 0;
       for (let k = 0; k < 1 + (sem % 3); k++) {
         const dentro = 25 + ((sem >> k) % 70);
-        periodos.push({ entrada: iso(t), salida: iso(t + dentro) });
+        periodos.push({
+          entrada: iso(t),
+          salida: iso(t + dentro),
+          modoEntrada: 'vehiculo',
+          modoSalida: (sem >> k) % 3 ? 'vehiculo' : 'a_pie',
+        });
         t += dentro + 10 + ((sem >> (k + 1)) % 25);
       }
     }
@@ -213,9 +227,15 @@ export function visitasDeDiaAnterior(programaciones, fecha, finJornadaHora = 17)
             .filter((x, k) => k < n - 1 && new Date(x.salida).getHours() < finJornadaHora)
             .map((x) => ({ hora: x.salida, lat: centroDe(p).lat + 0.002, lng: centroDe(p).lng }))
         : [];
+    // Tiempo dentro de la geocerca por modo (ejemplo: casi todo a pie o quieto, poco en vehículo)
+    const dentroSeg = minutosDentro(periodos) * 60;
+    const pie = Math.round(dentroSeg * (0.25 + (sem % 30) / 100));
+    const veh = Math.round(dentroSeg * (0.05 + (sem % 10) / 100));
+    const tiempos = { a_pie: pie, vehiculo: veh, quieto: Math.max(0, dentroSeg - pie - veh) };
     return {
       programacion: p,
       estado: 'cumplida',
+      tiempos,
       llegada: periodos[0].entrada,
       salida: periodos[n - 1].salida,
       permanenciaMin: minutosDentro(periodos),

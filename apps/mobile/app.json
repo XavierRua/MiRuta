@@ -16,11 +16,15 @@
         "RECEIVE_BOOT_COMPLETED",
         "SCHEDULE_EXACT_ALARM",
         "CAMERA",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "ACTIVITY_RECOGNITION"
       ]
     },
     "ios": {
-      "bundleIdentifier": "co.miruta.app"
+      "bundleIdentifier": "co.miruta.app",
+      "infoPlist": {
+        "NSMotionUsageDescription": "MiRuta usa el sensor de pasos para saber si te desplazas a pie o en vehículo durante tu jornada."
+      }
     },
     "plugins": [
       [
@@ -41,8 +45,7 @@
         {
           "color": "#ea580c"
         }
-      ],
-      "expo-secure-store"
+      ]
     ]
   }
 }

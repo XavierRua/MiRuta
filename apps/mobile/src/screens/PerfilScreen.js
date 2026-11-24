@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { color } from '../theme/colors';
@@ -7,56 +6,22 @@ import Seccion from '../components/Seccion';
 import Fila from '../components/Fila';
 import { useSesion } from '../context/SesionContext';
 import { api } from '../services/api';
-import { config } from '../config/app';
 import DocumentoFila from '../components/DocumentoFila';
 import { useDocumentos } from '../context/DocumentosContext';
+import { useJornadaDia } from '../context/JornadaDiaContext';
 import { Permiso } from '../context/PermisosContext';
-import { CLAVES, borrarClave, guardar, leer } from '../services/almacen';
 export default function PerfilScreen({ navigation }) {
-  const { salir, vinculo, desvincularDemo } = useSesion();
+  const { vinculo } = useSesion();
   const { yo, vehiculo, horario } = api.getPerfil();
-  const { todos, borrarTodo } = useDocumentos();
+  const { todos } = useDocumentos();
+  const { picoPlacaPropio, guardarPicoPlaca } = useJornadaDia();
   const docsVehiculo = todos.filter((d) => d.grupo === 'vehiculo');
   const docsAdicionales = todos.filter((d) => d.grupo === 'adicional');
   const porVencer = todos.filter((d) => d.estado?.clave === 'proximo' && (d.foto || d.cargado)).length;
   const vencidos = todos.filter((d) => d.estado?.clave === 'vencido' && (d.foto || d.cargado)).length;
 
-  // Eliminación del perfil: el trabajador la solicita y el administrador la aprueba
-  const [eliminacion, setEliminacion] = useState(null);
-  useEffect(() => {
-    leer(CLAVES.eliminacion)
-      .then(setEliminacion)
-      .catch(() => {});
-  }, []);
-  const solicitarEliminacion = () =>
-    Alert.alert(
-      'Eliminar mi perfil',
-      'Se enviará una solicitud al administrador. Cuando la apruebe, se borrarán tus datos personales, fotos y documentos de MiRuta y este celular quedará desvinculado. La empresa puede conservar los registros que la ley le exige guardar (por ejemplo, los de seguridad y salud en el trabajo).',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Enviar solicitud',
-          style: 'destructive',
-          onPress: async () => {
-            const r = await api.solicitarEliminacionPerfil('Solicitada desde la app');
-            await guardar(CLAVES.eliminacion, r);
-            setEliminacion(r);
-          },
-        },
-      ],
-    );
-  const cancelarEliminacion = async () => {
-    await api.cancelarEliminacionPerfil();
-    await borrarClave(CLAVES.eliminacion);
-    setEliminacion(null);
-  };
-  // Solo demo: lo que pasa cuando el administrador aprueba
-  const aprobarDemo = () => {
-    borrarTodo();
-    desvincularDemo();
-  };
   return (
-    <SafeAreaView style={s.fondo} edges={['top']}>
+    <SafeAreaView style={s.fondo} edges={[]}>
       <ScrollView contentContainerStyle={s.contenido}>
         <View style={s.cabecera}>
           <View style={s.avatar}>
@@ -94,6 +59,35 @@ export default function PerfilScreen({ navigation }) {
               <DocumentoFila key={d.id} doc={d} onPress={() => navigation.navigate('Documento', { id: d.id })} />
             ))}
             <Text style={s.notaCelular}>Toca un documento para verlo o actualizarlo cuando lo renueves.</Text>
+            {/* Pico y placa: en el preoperacional se avisa y ese día el vehículo no puede salir */}
+            <Permiso clave="perfil.picoPlaca.editar">
+              <View style={s.pico}>
+                <Text style={s.picoTitulo}>Pico y placa de {vehiculo.placa}</Text>
+                <View style={s.dias}>
+                  {['D', 'L', 'M', 'X', 'J', 'V', 'S'].map((d, i) => {
+                    const sel = picoPlacaPropio.includes(i);
+                    return (
+                      <Pressable
+                        key={d}
+                        style={[s.dia, sel && s.diaSel]}
+                        onPress={() =>
+                          guardarPicoPlaca(
+                            sel ? picoPlacaPropio.filter((x) => x !== i) : [...picoPlacaPropio, i].sort(),
+                          )
+                        }
+                      >
+                        <Text style={[s.diaTexto, sel && { color: '#fff' }]}>{d}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Text style={s.notaCelular}>
+                  {picoPlacaPropio.length
+                    ? 'Esos días el preoperacional no dejará usar este vehículo.'
+                    : 'Marca los días en que tu vehículo tiene pico y placa.'}
+                </Text>
+              </View>
+            </Permiso>
           </Seccion>
         </Permiso>
 
@@ -140,58 +134,29 @@ export default function PerfilScreen({ navigation }) {
           </Text>
         </Seccion>
 
-        <Pressable style={s.enlace} onPress={salir}>
-          <Ionicons name="log-out-outline" size={20} color={color.rojo} />
-          <Text style={[s.enlaceTexto, { color: color.rojo }]}>Cerrar sesión (pedir PIN)</Text>
-        </Pressable>
-        {config.modoDemo && (
-          <Pressable onPress={desvincularDemo}>
-            <Text style={s.demo}>Desvincular este celular (solo en la demo)</Text>
-          </Pressable>
-        )}
-
-        {/* Eliminar el perfil: requiere aprobación del administrador */}
-        <Permiso clave="perfil.solicitarEliminacion">
-          {eliminacion ? (
-            <View style={s.eliminacion}>
-              <View style={s.eliminacionCab}>
-                <Ionicons name="time" size={18} color={color.ambar} />
-                <Text style={s.eliminacionTitulo}>Solicitud de eliminación pendiente</Text>
-              </View>
-              <Text style={s.notaCelular}>
-                Enviada el {new Date(eliminacion.solicitadaEn).toLocaleDateString('es-CO')}. Tu perfil se eliminará
-                cuando el administrador la apruebe.
-              </Text>
-              <Pressable onPress={cancelarEliminacion}>
-                <Text style={s.cancelarEliminacion}>Cancelar solicitud</Text>
-              </Pressable>
-              {config.modoDemo && (
-                <Pressable onPress={aprobarDemo}>
-                  <Text style={s.demo}>Simular que el administrador la aprueba (solo en la demo)</Text>
-                </Pressable>
-              )}
-            </View>
-          ) : (
-            <Pressable style={s.enlace} onPress={solicitarEliminacion}>
-              <Ionicons name="trash-outline" size={20} color={color.rojo} />
-              <Text style={[s.enlaceTexto, { color: color.rojo }]}>Eliminar mi perfil</Text>
-              <Text style={s.notaCelular}>Requiere aprobación</Text>
-            </Pressable>
-          )}
-        </Permiso>
+        {/* Cerrar sesión y eliminar la cuenta están ahora en el menú lateral (☰) → Seguridad */}
       </ScrollView>
     </SafeAreaView>
   );
 }
 const s = StyleSheet.create({
+  pico: { gap: 8, borderTopWidth: 1, borderTopColor: color.fondo, paddingTop: 10 },
+  picoTitulo: { fontWeight: '700', color: color.texto },
+  dias: { flexDirection: 'row', gap: 6 },
+  dia: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: color.borde,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  diaSel: { backgroundColor: color.rojo, borderColor: color.rojo },
+  diaTexto: { fontWeight: '800', color: color.texto },
   alerta: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, padding: 10 },
   alertaTexto: { fontWeight: '700', fontSize: 13 },
-  eliminacion: { backgroundColor: color.ambarSuave, borderRadius: 14, padding: 16, gap: 8 },
-  eliminacionCab: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  eliminacionTitulo: { fontWeight: '700', color: color.ambar },
-  cancelarEliminacion: { color: color.primario, fontWeight: '700' },
   notaCelular: { color: color.suave, fontSize: 12, lineHeight: 17 },
-  demo: { color: color.suave, textAlign: 'center', fontSize: 12, textDecorationLine: 'underline', marginTop: 4 },
   fondo: { flex: 1, backgroundColor: color.fondo },
   contenido: { padding: 20, gap: 14 },
   cabecera: { alignItems: 'center', marginBottom: 4 },

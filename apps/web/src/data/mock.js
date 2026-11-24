@@ -65,7 +65,8 @@ export const trabajadores = [
     estado: 'en_ruta',
     lat: 6.2853,
     lng: -75.5651,
-    velocidad: 41,
+    velocidad: 4,
+    modo: 'a_pie', // caminando dentro de la Obra Torre Norte
     bateria: 91,
     ultimoReporte: 'hace 10 s',
     kmHoy: 55.1,
@@ -395,6 +396,40 @@ export const eventosGeocerca = [
 ];
 export const alertas = [
   {
+    id: 21,
+    tipo: 'salud_no_apto',
+    trabajador: 'Mateo Vélez',
+    mensaje:
+      'Respondió que NO está en condiciones de trabajar: "Fiebre y dolor de cabeza desde anoche". Comunícate con él.',
+    hora: '7:12',
+    estado: 'abierta',
+  },
+  {
+    id: 22,
+    tipo: 'incidente',
+    trabajador: 'Andrés Gómez',
+    mensaje: 'Caída leve al bajar de la moto · no puede continuar · 6.25010, -75.56810 · 1 foto',
+    hora: '10:41',
+    estado: 'abierta',
+  },
+  {
+    id: 23,
+    tipo: 'preoperacional_falla',
+    trabajador: 'Diego Muñoz',
+    mensaje: 'Preoperacional de PQR78J con falla en: Frenos ("frena muy largo"). Revisar antes de salir.',
+    hora: '7:21',
+    estado: 'abierta',
+  },
+  {
+    id: 24,
+    tipo: 'formularios_pendientes',
+    trabajador: 'Laura Cárdenas',
+    mensaje:
+      'A las 7:30 aún no diligencia el estado de salud ni el preoperacional (horario desde las 7:00). El GPS ya está activo.',
+    hora: '7:30',
+    estado: 'vista',
+  },
+  {
     id: 11,
     tipo: 'intento_otro_celular',
     trabajador: 'Diego Muñoz',
@@ -493,6 +528,12 @@ export const jornadasEjemplo = [
   { fecha: 'Mar 17 nov', inicio: '07:00', fin: '17:00', km: 63.0, duracion: '10 h', visitas: 6, alertas: 2 },
 ];
 // Recorrido de ejemplo de Carlos Restrepo (hoy)
+// Recorrido de ejemplo partido en tramos por modo (en vehículo → a pie dentro de un lugar → en vehículo)
+export const recorridoTramosEjemplo = () => [
+  { modo: 'vehiculo', puntos: recorridoEjemplo.slice(0, 6) },
+  { modo: 'a_pie', puntos: recorridoEjemplo.slice(5, 8) },
+  { modo: 'vehiculo', puntos: recorridoEjemplo.slice(7) },
+];
 export const recorridoEjemplo = [
   [6.2476, -75.5658],
   [6.249, -75.564],
@@ -665,9 +706,16 @@ function generarDesempeno() {
             lugar: LUGARES_EXTRA[0],
           };
         }
+        // Cómo se desplazó ese día: km y minutos a pie y en vehículo
+        const kmPie = Math.round((1 + (semilla % 30) / 10) * 10) / 10;
+        const desplazamiento = {
+          a_pie: { km: kmPie, min: 30 + (semilla % 55) },
+          vehiculo: { km: Math.round((km - kmPie) * 10) / 10, min: Math.round(horasMovimiento * 60) },
+        };
         lista.push({
           trabajadorId: t.id,
           fecha,
+          desplazamiento,
           horasExtra,
           km,
           horasMovimiento,

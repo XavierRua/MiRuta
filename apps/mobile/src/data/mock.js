@@ -13,8 +13,15 @@ export const yo = {
   contactoEmergencia: 'María Restrepo · 300 111 2233',
   licencia: 'A2 · vence 12/08/2029',
 };
+// Empresa del trabajador. logoUrl: el logo que sube el administrador en la web (null = logo de MiRuta)
+export const empresa = {
+  nombre: 'Distribuciones Andina S.A.S.',
+  logoUrl: null,
+};
 export const vehiculo = {
   placa: 'ABC12F',
+  tipo: 'moto', // 'moto' | 'carro': ícono en el mapa cuando va en vehículo
+  propio: true, // vehículo del trabajador (auxilio de rodamiento). Luego lo indicará el preoperacional del día
   descripcion: 'Yamaha FZ 2.0 · 2022 · Azul',
   propietario: 'Propio (recibe auxilio de rodamiento)',
   soat: { fecha: '14/03/2027', estado: 'ok' },
@@ -100,6 +107,23 @@ function generarJornadas() {
             }
           : null,
       km: Math.round((sabado ? 18 : 45) * 10 + (semilla % 30) * 10) / 10,
+      // Pausas del día (tipo, inicio y fin)
+      pausas: sabado
+        ? [{ texto: 'Desayuno', inicio: '9:05', fin: '9:20' }]
+        : [
+            { texto: 'Pausa activa', inicio: '9:0' + (semilla % 9), fin: '9:1' + (semilla % 9) },
+            { texto: 'Almuerzo', inicio: '12:0' + (semilla % 9), fin: '13:0' + (semilla % 9) },
+            ...(semilla % 4 === 0 ? [{ texto: 'Otras: Capacitación', inicio: '14:00', fin: '15:00' }] : []),
+          ],
+      // Cómo se desplazó: km y segundos a pie, en vehículo y quieto
+      desplazamiento: {
+        a_pie: { km: Math.round((1.2 + (semilla % 25) / 10) * 10) / 10, seg: (35 + (semilla % 50)) * 60 },
+        vehiculo: {
+          km: Math.round((sabado ? 16 : 42) + (semilla % 30)),
+          seg: (sabado ? 70 : 150 + (semilla % 60)) * 60,
+        },
+        quieto: { km: 0, seg: (sabado ? 120 : 300 + (semilla % 90)) * 60 },
+      },
       lugares: [...new Map(visitas.map((l) => [l.nombre, l])).values()],
       // Velocidad promedio (en movimiento) y máxima del día: se guardan al cerrar la jornada
       velPromedio: 22 + (semilla % 9),
@@ -222,3 +246,10 @@ export const documentosAdicionales = {
     subidoEn: enDias(-125),
   },
 };
+
+// Vehículos de la empresa (para el preoperacional cuando no usa el propio)
+export const vehiculosEmpresa = [
+  { placa: 'EMP12A', clase: 'moto', descripcion: 'Honda XR 150 · 2023', picoPlaca: [2] },
+  { placa: 'KLM345', clase: 'carro', descripcion: 'Renault Kangoo · 2021', picoPlaca: [4] },
+  { placa: 'TRK678', clase: 'camion', descripcion: 'Chevrolet NHR · 2020', picoPlaca: [1] },
+];

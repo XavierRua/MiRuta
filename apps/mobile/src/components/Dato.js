@@ -1,15 +1,24 @@
-import { StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { color } from '../theme/colors';
 
-// Tarjeta de indicador. Las cuatro de Jornada usan este mismo diseño:
+// Tarjeta de indicador. Todos los de "Indicadores diarios" usan este mismo diseño:
 // círculo con ícono, valor, título y detalle. Todas miden igual para quedar alineadas.
 // "tono" (opcional) pinta el círculo y el valor con el color del resultado: { color, fondo }
-export default function Dato({ icono, valor, texto, detalle, ancho, tono }) {
+// familia: 'ion' (Ionicons, por defecto) o 'mci' (MaterialCommunityIcons: persona caminando, moto, carro)
+// onPress (opcional): la tarjeta se puede tocar (p. ej. pausas). activo: borde del color del tono.
+export default function Dato({ icono, familia = 'ion', valor, texto, detalle, ancho, tono, onPress, activo }) {
+  const Icono = familia === 'mci' ? MaterialCommunityIcons : Ionicons;
+  const base = [
+    s.dato,
+    ancho ? { width: ancho } : { flex: 1 },
+    activo && { borderWidth: 2, borderColor: tono?.color ?? color.primario },
+  ];
+  const Caja = onPress ? Pressable : View;
   return (
-    <View style={[s.dato, ancho ? { width: ancho } : { flex: 1 }]}>
+    <Caja onPress={onPress} style={onPress ? ({ pressed }) => [...base, pressed && { opacity: 0.7 }] : base}>
       <View style={[s.icono, tono && { backgroundColor: tono.fondo }]}>
-        <Ionicons name={icono} size={26} color={tono ? tono.color : color.primario} />
+        <Icono name={icono} size={26} color={tono ? tono.color : color.primario} />
       </View>
       <Text
         style={[s.valor, tono && { color: tono.color }]}
@@ -30,7 +39,7 @@ export default function Dato({ icono, valor, texto, detalle, ancho, tono }) {
       >
         {detalle ?? ' '}
       </Text>
-    </View>
+    </Caja>
   );
 }
 

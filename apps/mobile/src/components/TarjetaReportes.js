@@ -12,6 +12,7 @@ const info = {
   disponible: { icono: 'time', color: color.ambar, texto: 'Envíalo ahora' },
   no_reporto: { icono: 'close-circle', color: color.rojo, texto: 'No reportó' },
   proximo: { icono: 'ellipse-outline', color: color.suave, texto: 'Próximo' },
+  excluida: { icono: 'school', color: color.morado, texto: 'No aplica (capacitación)' },
 };
 
 // Tarjeta de la pantalla Jornada: reportes de hoy y botón para enviar el de la hora actual
