@@ -1,3 +1,4 @@
+import { textoDuracion } from '../config/formularios';
 import { useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -40,7 +41,14 @@ export default function HistorialScreen({ navigation }) {
   const { dia: registrosHoy } = useJornadaDia();
   const pausasHoy = registrosHoy.pausas
     .filter((p) => p.fin)
-    .map((p) => ({ texto: p.texto, inicio: hhmm(new Date(p.inicio)), fin: hhmm(new Date(p.fin)) }));
+    .map((p) => ({
+      clase: p.clase ?? 'descanso',
+      texto: p.texto,
+      inicio: hhmm(new Date(p.inicio)),
+      fin: hhmm(new Date(p.fin)),
+      minutos: Math.round((new Date(p.fin) - new Date(p.inicio)) / 60000),
+      autorizadaPor: p.autorizadaPor,
+    }));
   const inicial = rangoSemana();
   const [desde, setDesde] = useState(inicial.desde);
   const [hasta, setHasta] = useState(inicial.hasta);
@@ -301,12 +309,29 @@ export default function HistorialScreen({ navigation }) {
                     })}
                   </View>
                 )}
-                {/* Pausas y descansos del día */}
+                {/* Registro de pausas y actividades autorizadas (aparte de los reportes) */}
                 {puede('pausas.usar') && j.pausas?.length > 0 && (
-                  <Text style={s.velTexto}>
-                    <Ionicons name="pause-circle" size={13} color={color.morado} />{' '}
-                    {j.pausas.map((p) => `${p.texto} ${p.inicio}–${p.fin}`).join(' · ')}
-                  </Text>
+                  <View style={s.pausas}>
+                    <Text style={s.pausasTitulo}>
+                      Pausas y actividades ·{' '}
+                      {textoDuracion(
+                        j.pausas.filter((p) => p.clase !== 'actividad').reduce((t, p) => t + (p.minutos ?? 0), 0),
+                      )}{' '}
+                      de descanso
+                    </Text>
+                    {j.pausas.map((p, i) => (
+                      <Text key={i} style={s.velTexto}>
+                        <Ionicons
+                          name={p.clase === 'actividad' ? 'checkmark-circle' : 'pause-circle'}
+                          size={13}
+                          color={color.morado}
+                        />{' '}
+                        <Text style={s.velValor}>{p.texto}</Text> {p.inicio}–{p.fin}
+                        {p.minutos != null ? ` · ${textoDuracion(p.minutos)}` : ''}
+                        {p.autorizadaPor ? ` · autorizó ${p.autorizadaPor}` : ''}
+                      </Text>
+                    ))}
+                  </View>
                 )}
                 {/* Velocidades guardadas al cerrar la jornada */}
                 <View style={s.velocidades}>
@@ -452,6 +477,8 @@ function Etiqueta({ lugar }) {
 }
 
 const s = StyleSheet.create({
+  pausas: { gap: 3, backgroundColor: color.moradoSuave, borderRadius: 10, padding: 10 },
+  pausasTitulo: { color: color.morado, fontWeight: '700', fontSize: 12, marginBottom: 2 },
   desplazamiento: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   despItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   filtros: { gap: 8, paddingVertical: 2 },

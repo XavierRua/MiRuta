@@ -22,6 +22,7 @@ import { useFranjasHoy } from '../hooks/useFranjasHoy';
 import { prepararNotificaciones, programarRecordatorios } from '../services/notificaciones';
 import { api } from '../services/api';
 import { franjasDelDia } from '../utils/reportes';
+import { textoExtension, tramosDePausas } from '../utils/pausas';
 import { useVelocidad } from '../hooks/useVelocidad';
 import { eficienciaHoy, nivelEficiencia } from '../utils/eficiencia';
 import { nivelVelocidad } from '../utils/velocidad';
@@ -31,7 +32,8 @@ import { Permiso, usePermisos } from '../context/PermisosContext';
 export default function JornadaScreen({ navigation }) {
   const { puede } = usePermisos();
   const { yo, horario, hoy } = useJornada();
-  const { franjas, conEstado, franjasRecordatorio, reportes, ahora, horaVerificada, desfaseMin } = useFranjasHoy();
+  const { franjas, conEstado, franjasRecordatorio, reportes, ahora, horaVerificada, desfaseMin, cierreHoy, pausas } =
+    useFranjasHoy();
   const cfg = api.getIndicadores();
 
   // Eficiencia del día: se recalcula al enviar un reporte o cuando una hora queda "No reportó"
@@ -77,13 +79,22 @@ export default function JornadaScreen({ navigation }) {
         const manana = new Date(ahora);
         manana.setDate(manana.getDate() + 1);
         // Incluye las horas extras activas; al finalizarlas se reprograma sin ellas
+        // Durante una pausa no suena ningún recordatorio de reporte, y las ventanas extendidas
+        // avisan con su nuevo cierre ("Te quedan 10 minutos" y "No reportaste" a la hora extendida)
         return programarRecordatorios(
           [...franjasRecordatorio, ...franjasDelDia(manana, api.getHorarioDia(manana))],
           reportes,
+          tramosDePausas(pausas, ahora),
         );
       })
       .catch(() => {});
-  }, [franjasRecordatorio.map((f) => f.id).join(','), reportes.length, horaVerificada, !!registrosDia.gpsApagado]);
+  }, [
+    franjasRecordatorio.map((f) => `${f.id}:${f.cierre?.getTime() ?? ''}`).join(','),
+    reportes.length,
+    horaVerificada,
+    !!registrosDia.gpsApagado,
+    pausas.map((p) => `${p.id}:${p.fin ?? ''}`).join(','),
+  ]);
 
   const abrirReporte = (f) =>
     navigation.navigate('NuevoReporte', {
@@ -93,6 +104,8 @@ export default function JornadaScreen({ navigation }) {
         inicio: f.inicio.toISOString(),
         fin: f.fin.toISOString(),
         cierre: f.cierre?.toISOString(),
+        extensionMin: f.extensionMin ?? 0,
+        extensionTexto: textoExtension(f),
         extra: !!f.extra,
         demo: !!f.demo,
       },
@@ -185,6 +198,8 @@ export default function JornadaScreen({ navigation }) {
               horaVerificada={horaVerificada}
               desfaseMin={desfaseMin}
               onEnviar={abrirReporte}
+              cierreHoy={cierreHoy}
+              pausaActiva={pausaActiva}
             />
           )}
         </Permiso>

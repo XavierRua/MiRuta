@@ -126,6 +126,8 @@ export default function NuevoReporteScreen({ route, navigation }) {
         {/* Datos automáticos */}
         <View style={s.auto}>
           <Fila icono="time" texto={`Franja ${franja.etiqueta}${franja.extra ? ' · horas extras' : ''}`} />
+          {/* Ventana extendida por una pausa: "Extendido +15 min por desayuno" */}
+          {!!franja.extensionTexto && <Fila icono="pause-circle" texto={franja.extensionTexto} />}
           <Fila
             icono="calendar"
             texto={`${formatoFecha(ahora)} · ${hhmm(ahora)}:${String(ahora.getSeconds()).padStart(2, '0')} (hora oficial)`}

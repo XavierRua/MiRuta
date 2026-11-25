@@ -12,6 +12,7 @@ import {
   FiMoon,
   FiNavigation2,
   FiActivity,
+  FiCheckSquare,
 } from 'react-icons/fi';
 
 // Opciones del menú lateral
@@ -25,6 +26,12 @@ export const menu = [
   { id: 'reportes', texto: 'Reportes de actividad', Icono: FiClipboard },
   { id: 'desempeno', texto: 'Desempeño', Icono: FiTrendingUp },
   { id: 'horasExtra', texto: 'Horas extras', Icono: FiMoon },
+  {
+    id: 'actividades',
+    texto: 'Actividades autorizadas',
+    Icono: FiCheckSquare,
+    permisos: ['web.actividades.autorizar'],
+  },
   {
     id: 'novedades',
     texto: 'Novedades y ausentismo',

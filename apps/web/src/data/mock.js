@@ -600,24 +600,35 @@ function generarReportes() {
           const semilla = (ti + 1) * 31 + d * 7 + h;
           // cada trabajador con un nivel de cumplimiento distinto para ver los tres colores
           const tasaFalla = [4, 13, 24, 8, 36, 18][ti % 6];
-          const estado = (semilla * 37 + h * 11 + d * 5) % 100 < tasaFalla ? 'no_reporto' : 'a_tiempo';
-          const enviadoEn = new Date(
-            cierre.getTime() - (2 + (semilla % 50)) * 60000, // dentro de la hora
-          );
+          // 12:00–13:00 entre semana: toda la hora en almuerzo → "En pausa – Almuerzo" (no cuenta en la eficiencia)
+          const almuerzo = h === 12 && fin === 17;
+          // 8:00–9:00: algunos días con desayuno de 8:00 a 8:15 → ventana extendida hasta 9:15
+          const desayuno = h === 8 && semilla % 3 === 0;
+          const estado = almuerzo
+            ? 'en_pausa'
+            : (semilla * 37 + h * 11 + d * 5) % 100 < tasaFalla
+              ? 'no_reporto'
+              : 'a_tiempo';
+          if (desayuno && new Date(cierre.getTime() + 15 * 60000) > ahora) break;
+          const enviadoEn = desayuno
+            ? new Date(cierre.getTime() + (3 + (semilla % 11)) * 60000) // dentro de la extensión (hasta 9:15)
+            : new Date(cierre.getTime() - (2 + (semilla % 50)) * 60000); // dentro de la hora
           lista.push({
             id: `${t.id}-${fecha.toISOString().slice(0, 10)}-${h}`,
             trabajadorId: t.id,
             fecha,
             franja: `${h}:00 – ${h + 1}:00`,
             estado,
-            enviadoEn: estado === 'no_reporto' ? null : enviadoEn,
-            descripcion: estado === 'no_reporto' ? null : tareasEjemplo[semilla % tareasEjemplo.length],
+            pausa: almuerzo ? 'Almuerzo' : null,
+            extension: desayuno ? 'Extendido +15 min por desayuno' : null,
+            enviadoEn: estado === 'a_tiempo' ? enviadoEn : null,
+            descripcion: estado === 'a_tiempo' ? tareasEjemplo[semilla % tareasEjemplo.length] : null,
             lugar: lugaresEjemplo[semilla % lugaresEjemplo.length],
             lat: t.lat + ((semilla % 9) - 4) * 0.001,
             lng: t.lng + ((semilla % 7) - 3) * 0.001,
             precisionM: 5 + (semilla % 15),
-            fotos: estado === 'no_reporto' ? 0 : 1 + (semilla % 3),
-            pesoKB: estado === 'no_reporto' ? 0 : 35 + (1 + (semilla % 3)) * (110 + (semilla % 60)),
+            fotos: estado !== 'a_tiempo' ? 0 : 1 + (semilla % 3),
+            pesoKB: estado !== 'a_tiempo' ? 0 : 35 + (1 + (semilla % 3)) * (110 + (semilla % 60)),
           });
         }
       }

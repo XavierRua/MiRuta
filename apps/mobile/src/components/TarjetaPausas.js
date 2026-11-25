@@ -1,73 +1,150 @@
-import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { color } from '../theme/colors';
 import { useJornadaDia } from '../context/JornadaDiaContext';
+import { usePermisos } from '../context/PermisosContext';
 import { hhmm } from '../utils/reportes';
-import { duracionMin, textoDuracion } from '../config/formularios';
+import { textoDuracion } from '../config/formularios';
 import Dato from './Dato';
 
-// Pausas y descansos, con el mismo diseño de "Indicadores diarios": título de sección y una grilla de
-// tarjetas (círculo con ícono, valor, título y detalle). Se toca la tarjeta para iniciar la pausa; se cierra
-// sola al cumplirse el tiempo configurado por el administrador, con una alarma, y queda en el historial.
+// Pausas de descanso y actividades autorizadas, con el diseño de "Indicadores diarios".
+// - Descansos (desayuno, almuerzo, pausa activa): los inicia el trabajador; se cierran solos con alarma.
+// - Actividades autorizadas (capacitación, reunión, cita médica…): solo aparecen si un perfil autorizado se las
+//   habilitó para hoy en la web. Tiempo asignado: alarma y cierre automático. Tiempo libre: cronómetro.
+// Mientras dure una pausa, el reporte de actividad se desactiva y su ventana se extiende (utils/pausas.js).
 const TONO = { color: color.morado, fondo: color.moradoSuave };
+const minutosEntre = (a, b) => Math.max(0, Math.round((b - new Date(a)) / 60000));
 
 export default function TarjetaPausas({ ahora, ancho }) {
-  const { tiposPausa, pausaActiva, iniciarPausa, cerrarPausa, dia } = useJornadaDia();
-  const [otras, setOtras] = useState(false);
+  const { tiposPausa, actividades, pausaActiva, iniciarPausa, iniciarActividad, cerrarPausa, dia, usoDescanso } =
+    useJornadaDia();
   const terminadas = dia.pausas.filter((p) => p.fin);
-  const tipoOtras = tiposPausa.find((t) => t.opciones);
+  const { puede } = usePermisos();
 
-  const iniciar = (tipo, opcion) => {
-    if (pausaActiva) {
-      Alert.alert('Ya tienes una pausa en curso', `Termina ${pausaActiva.texto.toLowerCase()} antes de iniciar otra.`);
-      return;
-    }
-    const nombre = (opcion ?? tipo).texto;
+  const avisarSiOcupado = () => {
+    if (!pausaActiva) return false;
+    Alert.alert('Ya tienes una en curso', `Termina ${pausaActiva.texto.toLowerCase()} antes de iniciar otra.`);
+    return true;
+  };
+  const conError = (fn) => fn().catch((e) => Alert.alert('No se pudo iniciar', e.message));
+
+  const iniciarDescanso = (t) => {
+    if (avisarSiOcupado()) return;
+    const uso = usoDescanso(t, ahora);
+    const bolsa = t.bolsaMin != null;
+    const dura = bolsa ? Math.min(t.minutos, uso.restanteMin) : t.minutos;
     Alert.alert(
-      `Iniciar ${nombre.toLowerCase()}`,
-      `Dura ${textoDuracion(duracionMin(opcion ?? tipo))}. Se cerrará sola y sonará una alarma al terminar.`,
+      `Iniciar ${t.texto.toLowerCase()}`,
+      `${
+        bolsa
+          ? `Te quedan ${textoDuracion(uso.restanteMin)} de pausa activa hoy. Esta puede durar hasta ${textoDuracion(dura)}; si la terminas antes, lo que no uses queda en tu bolsa.`
+          : `Dura ${textoDuracion(dura)} y solo se puede tomar ${t.veces === 1 ? 'una vez' : `${t.veces} veces`} al día.`
+      } Se cerrará sola y sonará una alarma. Mientras dure no se pide el reporte y su hora se extiende por el tiempo de la pausa.`,
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Iniciar', onPress: () => iniciarPausa(tipo, opcion).then(() => setOtras(false)) },
+        { text: 'Iniciar', onPress: () => conError(() => iniciarPausa(t)) },
       ],
     );
   };
 
-  const volverAntes = () =>
-    Alert.alert(`Terminar ${pausaActiva.texto.toLowerCase()}`, '¿Quieres volver al trabajo antes de tiempo?', [
-      { text: 'Seguir en pausa', style: 'cancel' },
-      { text: 'Volver al trabajo', onPress: () => cerrarPausa(true) },
-    ]);
+  const iniciarAutorizada = (a) => {
+    if (avisarSiOcupado()) return;
+    Alert.alert(
+      `Iniciar ${a.texto.toLowerCase()}`,
+      `${a.modo === 'asignado' ? `Tiempo asignado: ${textoDuracion(a.minutos)}. Se cerrará sola y sonará una alarma.` : 'Tiempo libre: corre un cronómetro y tú la terminas.'}${a.nota ? `\n\n${a.nota}` : ''}\n\nAutorizó: ${a.autorizadaPor}`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Iniciar', onPress: () => conError(() => iniciarActividad(a)) },
+      ],
+    );
+  };
 
-  const restan = pausaActiva ? Math.max(0, Math.ceil((new Date(pausaActiva.finPrevisto) - ahora) / 60000)) : 0;
+  const terminar = () => {
+    const libre = !pausaActiva.finPrevisto;
+    const bolsa = pausaActiva.tipo === 'pausa_activa';
+    Alert.alert(
+      `Terminar ${pausaActiva.texto.toLowerCase()}`,
+      libre
+        ? '¿Ya terminaste? Se detendrá el cronómetro.'
+        : bolsa
+          ? '¿Terminaste tu pausa activa? Los minutos que no usaste quedan en tu bolsa para más tarde.'
+          : '¿Quieres volver al trabajo antes de tiempo? El tiempo que no uses no se guarda.',
+      [
+        { text: libre ? 'Seguir' : 'Seguir en pausa', style: 'cancel' },
+        { text: libre ? 'Terminar' : 'Volver al trabajo', onPress: () => cerrarPausa(true) },
+      ],
+    );
+  };
 
-  // Detalle de cada tarjeta: la pausa en curso, la última hecha hoy o la invitación a tocarla
-  const ultimaDe = (id, opcionId) =>
-    terminadas.filter((p) => p.tipo === id && (!opcionId || p.opcion === opcionId)).pop();
-  const esActiva = (id, opcionId) =>
-    pausaActiva && pausaActiva.tipo === id && (!opcionId || pausaActiva.opcion === opcionId);
-
-  const tarjeta = (t, o) => {
-    const activa = esActiva(t.id, o?.id);
-    const ultima = ultimaDe(t.id, o?.id);
+  // ---------- Tarjetas de descanso ----------
+  const tarjetaDescanso = (t) => {
+    const activa = pausaActiva?.clase !== 'actividad' && pausaActiva?.tipo === t.id ? pausaActiva : null;
+    const hechas = terminadas.filter((p) => p.tipo === t.id);
+    const ultima = hechas[hechas.length - 1];
+    const uso = usoDescanso(t, ahora);
+    const bolsa = t.bolsaMin != null;
+    const agotada = uso.agotado && !activa;
+    const restan = activa ? Math.max(0, Math.ceil((new Date(activa.finPrevisto) - ahora) / 60000)) : 0;
     return (
       <Dato
-        key={o?.id ?? t.id}
+        key={t.id}
         ancho={ancho}
-        icono={(o ?? t).icono ?? 'pause'}
+        icono={t.icono ?? 'pause'}
         tono={activa || ultima ? TONO : undefined}
-        activo={activa}
-        valor={textoDuracion(activa ? restan : duracionMin(o ?? t))}
-        texto={(o ?? t).texto}
+        activo={!!activa}
+        valor={textoDuracion(activa ? restan : bolsa ? uso.restanteMin : t.minutos)}
+        texto={t.texto}
         detalle={
           activa
-            ? 'En curso · toca para volver'
-            : ultima
-              ? `Hecha ${hhmm(new Date(ultima.inicio))}–${hhmm(new Date(ultima.fin))}`
-              : 'Toca para iniciar'
+            ? bolsa
+              ? 'En curso · toca para terminar'
+              : 'En curso · toca para volver'
+            : bolsa
+              ? agotada
+                ? `Usaste tus ${t.bolsaMin} min de hoy`
+                : `Te quedan hoy (máx. ${t.minutos} por pausa)`
+              : agotada && ultima
+                ? `Ya la tomaste ${hhmm(new Date(ultima.inicio))}–${hhmm(new Date(ultima.fin))}`
+                : 'Toca para iniciar'
         }
-        onPress={activa ? volverAntes : () => iniciar(t, o)}
+        onPress={activa ? terminar : agotada ? undefined : () => iniciarDescanso(t)}
+      />
+    );
+  };
+
+  // ---------- Tarjetas de actividades autorizadas ----------
+  const tarjetaActividad = (a) => {
+    const registro = dia.pausas.find((p) => p.actividadId === a.id);
+    const activa = registro && !registro.fin ? registro : null;
+    const hecha = registro?.fin ? registro : null;
+    const valor = activa
+      ? activa.finPrevisto
+        ? textoDuracion(Math.max(0, Math.ceil((new Date(activa.finPrevisto) - ahora) / 60000)))
+        : textoDuracion(minutosEntre(activa.inicio, ahora)) // cronómetro
+      : hecha
+        ? textoDuracion(minutosEntre(hecha.inicio, new Date(hecha.fin)))
+        : a.modo === 'asignado'
+          ? textoDuracion(a.minutos)
+          : 'Libre';
+    return (
+      <Dato
+        key={a.id}
+        ancho={ancho}
+        icono={a.icono ?? 'checkmark-circle'}
+        tono={activa || hecha ? TONO : undefined}
+        activo={!!activa}
+        valor={valor}
+        texto={a.texto}
+        detalle={
+          activa
+            ? activa.finPrevisto
+              ? 'Faltan · toca para terminar'
+              : 'Cronómetro · toca para terminar'
+            : hecha
+              ? `Hecha ${hhmm(new Date(hecha.inicio))}–${hhmm(new Date(hecha.fin))}`
+              : `Autorizó ${a.autorizadaPor.split(' (')[0]}`
+        }
+        onPress={activa ? terminar : hecha ? undefined : () => iniciarAutorizada(a)}
       />
     );
   };
@@ -79,10 +156,10 @@ export default function TarjetaPausas({ ahora, ancho }) {
           <Text style={s.titulo}>Pausas y descansos</Text>
           <Text style={s.sub}>
             {pausaActiva
-              ? `${pausaActiva.texto} hasta las ${hhmm(new Date(pausaActiva.finPrevisto))} · sonará una alarma`
-              : otras
-                ? 'Elige el motivo de la pausa'
-                : 'Toca una tarjeta para iniciarla. Se cierra sola al cumplir el tiempo.'}
+              ? pausaActiva.finPrevisto
+                ? `${pausaActiva.texto} hasta las ${hhmm(new Date(pausaActiva.finPrevisto))} · sonará una alarma`
+                : `${pausaActiva.texto} desde las ${hhmm(new Date(pausaActiva.inicio))} · tiempo libre`
+              : 'Toca una tarjeta para iniciarla. Se cierra sola al cumplir el tiempo.'}
           </Text>
         </View>
         <View style={[s.chip, pausaActiva && { backgroundColor: color.moradoSuave }]}>
@@ -97,31 +174,19 @@ export default function TarjetaPausas({ ahora, ancho }) {
         </View>
       </View>
 
-      <View style={s.grilla}>
-        {otras
-          ? tipoOtras.opciones.map((o) => tarjeta(tipoOtras, o))
-          : tiposPausa.map((t) =>
-              t.opciones && !esActiva(t.id) ? (
-                <Dato
-                  key={t.id}
-                  ancho={ancho}
-                  icono={t.icono}
-                  tono={ultimaDe(t.id) ? TONO : undefined}
-                  valor={`${t.opciones.length} tipos`}
-                  texto={t.texto}
-                  detalle={t.opciones.map((o) => o.texto).join(', ')}
-                  onPress={() => (pausaActiva ? iniciar(t) : setOtras(true))}
-                />
-              ) : (
-                tarjeta(t, t.opciones && pausaActiva ? t.opciones.find((o) => o.id === pausaActiva.opcion) : undefined)
-              ),
-            )}
-      </View>
-      {otras && (
-        <Pressable onPress={() => setOtras(false)} style={s.volver}>
-          <Ionicons name="chevron-back" size={16} color={color.primario} />
-          <Text style={s.volverTexto}>Volver a las pausas</Text>
-        </Pressable>
+      <View style={s.grilla}>{tiposPausa.map(tarjetaDescanso)}</View>
+
+      {/* Solo aparecen cuando las habilitan en la web para este trabajador y esta fecha */}
+      {puede('actividades.usar') && actividades.length > 0 && (
+        <>
+          <View style={s.cab}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.titulo}>Actividades autorizadas</Text>
+              <Text style={s.sub}>Habilitadas para hoy. Mientras duren, tu reporte se extiende.</Text>
+            </View>
+          </View>
+          <View style={s.grilla}>{actividades.map(tarjetaActividad)}</View>
+        </>
       )}
     </View>
   );
@@ -143,6 +208,4 @@ const s = StyleSheet.create({
   },
   chipTexto: { fontSize: 12, fontWeight: '700', color: color.suave },
   grilla: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  volver: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 4 },
-  volverTexto: { color: color.primario, fontWeight: '700' },
 });

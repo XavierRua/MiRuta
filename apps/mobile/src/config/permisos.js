@@ -71,6 +71,10 @@ export const PERMISOS = {
   'perfil.solicitarEliminacion': { grupo: 'Menú → Seguridad', texto: 'Solicitar la eliminación de su cuenta' },
 
   // ---------- Encabezado y menú ----------
+  'actividades.usar': {
+    grupo: 'Pausas',
+    texto: 'Iniciar las actividades autorizadas que le habiliten (capacitación, reunión, cita médica…)',
+  },
   'notificaciones.ver': { grupo: 'Encabezado', texto: 'Campana de notificaciones con la lista de avisos' },
   'seguridad.cambiarPin': { grupo: 'Menú → Seguridad', texto: 'Cambiar su contraseña (PIN)' },
 };

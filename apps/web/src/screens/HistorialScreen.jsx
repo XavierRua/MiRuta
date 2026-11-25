@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FiDownload, FiAlertTriangle, FiEye, FiFlag } from 'react-icons/fi';
+import { FiDownload, FiAlertTriangle, FiCoffee, FiEye, FiFlag } from 'react-icons/fi';
 import VisitaDetalleModal from '../components/VisitaDetalleModal';
 import FiltroHistorialAdmin from '../components/FiltroHistorialAdmin';
 import LeyendaDesplazamiento from '../components/LeyendaDesplazamiento';
@@ -14,6 +14,9 @@ import { ESTADOS_VISITA, TIPOS, generarVisitas, textoPermanencia } from '../util
 import { useEmpresa } from '../hooks/useEmpresa';
 import { api } from '../services/api';
 import { aTextoFecha, deTextoFecha, validarRango } from '../utils/fechas';
+import { generarNovedades } from '../utils/novedades';
+import { useNovedades } from '../context/NovedadesContext';
+import { textoDuracion } from '../config/formularios';
 
 const fechaCorta = (d) => d.toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' });
 
@@ -65,6 +68,19 @@ export default function HistorialScreen() {
   const total = api.resumirIndicadores(dias)[0];
   // Visitas programadas por el administrador: cumplidas / programadas de cada día
   const { programaciones } = useProgramacion();
+  // Registro de pausas y actividades autorizadas del trabajador (aparte de los reportes)
+  const { formularios, actividades, apagados } = useNovedades();
+  const pausasPeriodo = useMemo(
+    () =>
+      error || !t
+        ? []
+        : generarNovedades([t], deTextoFecha(filtro.desde), deTextoFecha(filtro.hasta), apagados, [], {
+            descansos: formularios.descansos,
+            actividades,
+          }).pausas,
+    [t?.id, filtro, error, formularios, actividades, apagados],
+  );
+  const descansoMin = pausasPeriodo.filter((p) => p.clase === 'Descanso').reduce((x, p) => x + p.minutos, 0);
   const visitasPeriodo = useMemo(
     () =>
       error || !t ? [] : generarVisitas(programaciones, [t.id], deTextoFecha(filtro.desde), deTextoFecha(filtro.hasta)),
@@ -324,6 +340,43 @@ export default function HistorialScreen() {
                     </li>
                   ))}
                 </ul>
+              )}
+            </section>
+
+            <section className="panel">
+              <h2>
+                <FiCoffee /> Pausas y actividades ({pausasPeriodo.length})
+              </h2>
+              {pausasPeriodo.length === 0 ? (
+                <p className="nota">Sin pausas en este periodo.</p>
+              ) : (
+                <>
+                  <p className="nota">
+                    Descanso total: <strong>{textoDuracion(descansoMin)}</strong> · Actividades autorizadas:{' '}
+                    <strong>
+                      {textoDuracion(
+                        pausasPeriodo.filter((p) => p.clase !== 'Descanso').reduce((x, p) => x + p.minutos, 0),
+                      )}
+                    </strong>
+                  </p>
+                  <ul className="lista-visitas">
+                    {pausasPeriodo.slice(0, 60).map((p, i) => (
+                      <li key={i}>
+                        <span className={`chip ${p.clase === 'Descanso' ? 'morado' : 'info'}`}>{p.clase}</span>
+                        <div>
+                          <strong>
+                            {fechaCorta(p.fecha)} · {p.tipo}
+                          </strong>
+                          <small className="bloque">
+                            {p.inicio}–{p.fin} · {textoDuracion(p.minutos)}
+                            {p.autorizo !== '—' && ` · autorizó ${p.autorizo}`}
+                          </small>
+                          {p.exceso > 0 && <small className="bloque texto-danger">Excedió {p.exceso} min</small>}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
             </section>
 

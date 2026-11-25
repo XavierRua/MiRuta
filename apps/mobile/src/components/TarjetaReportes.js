@@ -3,7 +3,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { color } from '../theme/colors';
 import { config } from '../config/app';
 import { HORA_SERVIDOR } from '../config/reportes';
-import { cierreJornada, franjaParaEnviar, hhmm, minutosRestantes } from '../utils/reportes';
+import { cierreDe, franjasParaEnviar, hhmm, minutosRestantes } from '../utils/reportes';
+import { nombrePausa, pausasEnVentana } from '../utils/pausas';
+import { textoDuracion } from '../config/formularios';
 import { useHorasExtra } from '../context/HorasExtraContext';
 import { api } from '../services/api';
 
@@ -13,19 +15,48 @@ const info = {
   no_reporto: { icono: 'close-circle', color: color.rojo, texto: 'No reportó' },
   proximo: { icono: 'ellipse-outline', color: color.suave, texto: 'Próximo' },
   excluida: { icono: 'school', color: color.morado, texto: 'No aplica (capacitación)' },
+  en_pausa: { icono: 'pause-circle', color: color.morado, texto: 'En pausa' },
 };
 
+const esActividad = (p) => p.clase === 'actividad';
+
+// Mensaje mientras dura la pausa: "Desayuno en curso. Tienes +15 min para enviar el reporte."
+// o, para una actividad autorizada: "Estás en capacitación. Tienes +30 min para enviar el reporte."
+function mensajePausa(p, min) {
+  const extra = p.finPrevisto
+    ? `Tienes +${textoDuracion(min)} para enviar el reporte.`
+    : `Tu ventana se extiende mientras dure (+${textoDuracion(min)} hasta ahora).`;
+  return esActividad(p) ? `Estás en ${nombrePausa(p)}. ${extra}` : `${p.texto} en curso. ${extra}`;
+}
+
 // Tarjeta de la pantalla Jornada: reportes de hoy y botón para enviar el de la hora actual
-export default function TarjetaReportes({ franjas, conEstado, reportes, ahora, horaVerificada, desfaseMin, onEnviar }) {
+export default function TarjetaReportes({
+  franjas,
+  conEstado,
+  reportes,
+  ahora,
+  horaVerificada,
+  desfaseMin,
+  onEnviar,
+  cierreHoy,
+  pausaActiva,
+}) {
   const horarioHoy = api.getHorarioDia(ahora); // horario que configuró el administrador
-  const siguiente = franjaParaEnviar(franjas, reportes, config.modoDemo, ahora, !!horarioHoy);
+  // Ventanas abiertas ahora (con una pausa pueden ser dos: la anterior extendida y la actual)
+  const abiertas = franjasParaEnviar(franjas, reportes, config.modoDemo, ahora, !!horarioHoy);
+  const siguiente = abiertas[0] ?? null;
   // Jornada finalizada: pasó el fin del horario + la hora de más, y no hay horas extras activas
   const { activa: extraActiva } = useHorasExtra();
-  const cierre = cierreJornada(ahora, horarioHoy);
+  const cierre = cierreHoy; // fin del horario + hora de más (+ la extensión por pausas de la última ventana)
   const jornadaFinalizada = !!cierre && ahora >= cierre && !extraActiva;
   const enviados = conEstado.filter((f) => f.estado === 'enviado').length;
   const noReporto = conEstado.filter((f) => f.estado === 'no_reporto').length;
-  const restan = siguiente ? minutosRestantes(siguiente, ahora) : 0;
+  // Ventanas que la pausa en curso está extendiendo (para el mensaje)
+  const extendidasPorPausa = pausaActiva
+    ? conEstado
+        .map((f) => ({ f, r: pausasEnVentana(f, [pausaActiva], ahora) }))
+        .filter(({ f, r }) => r.extensionMs > 0 && !f.enPausa && f.estado !== 'enviado')
+    : [];
   const proxima = conEstado.find((f) => f.estado === 'proximo');
 
   return (
@@ -58,7 +89,31 @@ export default function TarjetaReportes({ franjas, conEstado, reportes, ahora, h
         </View>
       )}
 
-      {jornadaFinalizada && !siguiente ? (
+      {pausaActiva ? (
+        // Durante la pausa: el botón se desactiva y los recordatorios de reporte se detienen
+        <View style={s.pausa}>
+          <View style={s.pausaFila}>
+            <Ionicons name={pausaActiva.icono ?? 'pause-circle'} size={22} color={color.morado} />
+            <Text style={s.pausaTitulo}>
+              {extendidasPorPausa.length === 1
+                ? mensajePausa(pausaActiva, extendidasPorPausa[0].r.extensionMin)
+                : esActividad(pausaActiva)
+                  ? `Estás en ${nombrePausa(pausaActiva)}.`
+                  : `${pausaActiva.texto} en curso.`}
+            </Text>
+          </View>
+          {extendidasPorPausa.length > 1 &&
+            extendidasPorPausa.map(({ f }) => (
+              <Text key={f.id} style={s.pausaLinea}>
+                Ventana {hhmm(f.inicio)} extendida hasta las {hhmm(cierreDe(f))}
+              </Text>
+            ))}
+          <View style={[s.boton, s.botonOff, s.botonPausa]}>
+            <Ionicons name="camera" size={20} color="#fff" />
+            <Text style={s.botonTexto}>Enviar reporte (en pausa)</Text>
+          </View>
+        </View>
+      ) : jornadaFinalizada && !siguiente ? (
         <View style={[s.boton, s.botonOff, s.finalizada]}>
           <Ionicons name="lock-closed" size={20} color="#fff" />
           <View style={{ alignItems: 'center' }}>
@@ -66,18 +121,32 @@ export default function TarjetaReportes({ franjas, conEstado, reportes, ahora, h
             <Text style={s.botonSub}>No se pueden enviar más reportes. (Cerró a las {hhmm(cierre)})</Text>
           </View>
         </View>
-      ) : siguiente ? (
-        <Pressable
-          style={[s.boton, restan <= 10 && s.botonUrgente, !horaVerificada && s.botonOff]}
-          disabled={!horaVerificada}
-          onPress={() => onEnviar(siguiente)}
-        >
-          <Ionicons name="camera" size={20} color="#fff" />
-          <View style={{ alignItems: 'center' }}>
-            <Text style={s.botonTexto}>Enviar reporte {siguiente.etiqueta}</Text>
-            <Text style={s.botonSub}>Cierra en {restan} min</Text>
-          </View>
-        </Pressable>
+      ) : abiertas.length ? (
+        abiertas.map((f) => {
+          const restan = minutosRestantes(f, ahora);
+          return (
+            <View key={f.id} style={{ gap: 6 }}>
+              <Pressable
+                style={[s.boton, restan <= 10 && s.botonUrgente, !horaVerificada && s.botonOff]}
+                disabled={!horaVerificada}
+                onPress={() => onEnviar(f)}
+              >
+                <Ionicons name="camera" size={20} color="#fff" />
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={s.botonTexto}>Enviar reporte {f.etiqueta}</Text>
+                  <Text style={s.botonSub}>Cierra en {restan} min</Text>
+                </View>
+              </Pressable>
+              {/* Al terminar la pausa: "Ventana extendida hasta las 9:15 por desayuno" */}
+              {f.extensionMin > 0 && (
+                <Text style={s.extendida}>
+                  Ventana {hhmm(f.inicio)} extendida hasta las {hhmm(cierreDe(f))} por{' '}
+                  {f.motivosExtension.map((m) => nombrePausa(m.pausa)).join(' y ')}
+                </Text>
+              )}
+            </View>
+          );
+        })
       ) : (
         <View style={s.alDia}>
           <Ionicons name="checkmark-done" size={18} color={color.verde} />
@@ -101,6 +170,15 @@ export default function TarjetaReportes({ franjas, conEstado, reportes, ahora, h
         <View style={s.lista}>
           {conEstado.map((f) => {
             const i = info[f.estado];
+            // Texto de la ventana: "En pausa – Almuerzo", "Extendida hasta 9:15" o el estado normal
+            const texto =
+              f.estado === 'en_pausa'
+                ? `En pausa – ${f.enPausa.texto}`
+                : f.estado === 'disponible' && f.extensionMin
+                  ? `Extendida hasta ${hhmm(cierreDe(f))}`
+                  : f.estado === 'enviado' && f.reporte?.extensionMin
+                    ? `Enviado (+${f.reporte.extensionMin} min)`
+                    : i.texto;
             return (
               <View key={f.id} style={s.fila}>
                 <Ionicons name={i.icono} size={18} color={i.color} />
@@ -108,7 +186,9 @@ export default function TarjetaReportes({ franjas, conEstado, reportes, ahora, h
                   {f.etiqueta}
                   {f.extra ? <Text style={s.extra}> EXTRA</Text> : null}
                 </Text>
-                <Text style={[s.estado, { color: i.color }]}>{i.texto}</Text>
+                <Text style={[s.estado, { color: i.color }]} numberOfLines={1}>
+                  {texto}
+                </Text>
               </View>
             );
           })}
@@ -154,5 +234,11 @@ const s = StyleSheet.create({
   fila: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   franja: { flex: 1, color: color.texto, fontVariant: ['tabular-nums'] },
   extra: { color: color.morado, fontWeight: '800', fontSize: 11 },
-  estado: { fontSize: 13, fontWeight: '600' },
+  estado: { fontSize: 13, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
+  pausa: { backgroundColor: color.moradoSuave, borderRadius: 12, padding: 12, gap: 8 },
+  pausaFila: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pausaTitulo: { flex: 1, color: color.morado, fontWeight: '700', lineHeight: 19 },
+  pausaLinea: { color: color.morado, fontSize: 13, marginLeft: 32 },
+  botonPausa: { backgroundColor: color.morado },
+  extendida: { color: color.morado, fontSize: 12, fontWeight: '600', textAlign: 'center' },
 });

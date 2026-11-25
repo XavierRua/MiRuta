@@ -2,6 +2,7 @@ import { FlatList, Image, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { color } from '../theme/colors';
 import { useReportes } from '../context/ReportesContext';
+import { useJornadaDia } from '../context/JornadaDiaContext';
 import { useHorasExtra } from '../context/HorasExtraContext';
 import { ahoraServidor } from '../services/horaServidor';
 import { franjasDeSesion } from '../utils/horasExtra';
@@ -15,12 +16,15 @@ export default function ReportesDiaScreen({ route }) {
   const fecha = new Date(route.params.fecha);
   const { reportes } = useReportes();
   const { sesiones } = useHorasExtra();
+  const { dia } = useJornadaDia();
   // Horas extras de hoy: sus franjas también cuentan (las ya iniciadas)
   const ahora = ahoraServidor();
   const franjasExtra = sesiones.flatMap((x) => franjasDeSesion(x, ahora, reportes)).filter((f) => f.inicio <= ahora);
-  const lista = api.getReportesDia(fecha, reportes, franjasExtra);
-  const enviados = lista.filter((r) => r.estado !== 'no_reporto').length;
-  const pct = porcentaje(enviados, lista.length);
+  // Con las pausas de hoy: las ventanas extendidas cierran más tarde y las cubiertas quedan "En pausa"
+  const lista = api.getReportesDia(fecha, reportes, franjasExtra, dia.pausas);
+  const cuentan = lista.filter((r) => r.estado !== 'en_pausa'); // "En pausa" no cuenta en la eficiencia
+  const enviados = cuentan.filter((r) => r.estado !== 'no_reporto').length;
+  const pct = porcentaje(enviados, cuentan.length);
   const nivel = nivelEficiencia(pct);
 
   return (
@@ -50,7 +54,20 @@ export default function ReportesDiaScreen({ route }) {
         </View>
       }
       renderItem={({ item: r }) =>
-        r.estado === 'no_reporto' ? (
+        r.estado === 'en_pausa' ? (
+          <View style={[s.tarjeta, s.tarjetaPausa]}>
+            <View style={s.cab}>
+              <View style={[s.selfie, s.selfiePausa]}>
+                <Ionicons name="pause" size={18} color={color.morado} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.franja}>{r.franja}</Text>
+                <Text style={s.hora}>Toda la hora en pausa: no necesitaba reporte ni cuenta en la eficiencia</Text>
+              </View>
+              <Text style={[s.estado, s.enPausa]}>En pausa – {r.pausa}</Text>
+            </View>
+          </View>
+        ) : r.estado === 'no_reporto' ? (
           <View style={[s.tarjeta, s.tarjetaNo]}>
             <View style={s.cab}>
               <View style={[s.selfie, s.selfieNo]}>
@@ -61,7 +78,9 @@ export default function ReportesDiaScreen({ route }) {
                   {r.franja}
                   {r.extra ? <Text style={s.extra}> HORAS EXTRAS</Text> : null}
                 </Text>
-                <Text style={s.hora}>No se envió el reporte en esta hora</Text>
+                <Text style={s.hora}>
+                  No se envió el reporte en esta hora{r.extensionTexto ? ` (${r.extensionTexto.toLowerCase()})` : ''}
+                </Text>
               </View>
               <Text style={[s.estado, s.noReporto]}>No reportó</Text>
             </View>
@@ -81,7 +100,10 @@ export default function ReportesDiaScreen({ route }) {
                   {r.franja}
                   {r.extra ? <Text style={s.extra}> HORAS EXTRAS</Text> : null}
                 </Text>
-                <Text style={s.hora}>Enviado a las {hhmm(r.enviadoEn)}</Text>
+                <Text style={s.hora}>
+                  Enviado a las {hhmm(r.enviadoEn)}
+                  {r.extensionTexto ? ` · ${r.extensionTexto}` : ''}
+                </Text>
               </View>
               <Text style={[s.estado, s.aTiempo]}>Reportó</Text>
             </View>
@@ -109,6 +131,9 @@ export default function ReportesDiaScreen({ route }) {
 }
 
 const s = StyleSheet.create({
+  tarjetaPausa: { backgroundColor: color.moradoSuave },
+  selfiePausa: { backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  enPausa: { color: color.morado, backgroundColor: '#fff' },
   fondo: { flex: 1, backgroundColor: color.fondo },
   contenido: { padding: 20, gap: 12, paddingBottom: 40 },
   titulo: { fontSize: 18, fontWeight: '800', color: color.texto },

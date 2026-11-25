@@ -99,7 +99,11 @@ async function inmediata(titulo, cuerpo, datos) {
 // 1. al abrir la hora: "Ya puedes enviar tu reporte"
 // 2. 10 minutos antes de cerrar: "Te quedan 10 minutos"
 // 3. al cerrar la hora: "No reportaste" (se cancela si envía el reporte)
-export async function programarRecordatorios(franjas, reportes) {
+// pausas = [{ inicio, fin }]: mientras el trabajador está en pausa no se programa ningún recordatorio.
+// El cierre de cada franja ya viene extendido por sus pausas (utils/pausas.js).
+export async function programarRecordatorios(franjas, reportes, pausas = []) {
+  const enPausa = (fecha) => pausas.some((p) => fecha >= p.inicio && fecha < p.fin);
+  const siNoEnPausa = (fecha, ...resto) => (enPausa(fecha) ? Promise.resolve(null) : programar(fecha, ...resto));
   // Solo se cancelan los recordatorios de reportes (los avisos de documentos se mantienen)
   await cancelarPorTipo(['reporte', 'no_reporto']);
   Object.keys(programadas).forEach((k) => delete programadas[k]);
@@ -114,19 +118,19 @@ export async function programarRecordatorios(franjas, reportes) {
     const cierre = f.cierre ?? f.fin;
     const aviso = new Date(cierre.getTime() - REPORTES.avisoAntesDeCerrarMin * 60000);
     const ids = await Promise.all([
-      programar(
+      siNoEnPausa(
         f.inicio,
         'Ya puedes enviar tu reporte',
         `Tienes hasta las ${hhmm(cierre)} para reportar ${f.etiqueta}.`,
         datos,
       ),
-      programar(
+      siNoEnPausa(
         aviso,
         `Te quedan ${REPORTES.avisoAntesDeCerrarMin} minutos`,
         `Envía tu reporte de ${f.etiqueta} antes de que cierre la hora.`,
         datos,
       ),
-      programar(
+      siNoEnPausa(
         cierre,
         'No reportaste',
         `No enviaste el reporte de ${f.etiqueta}. Quedó registrado como "No reportó".`,

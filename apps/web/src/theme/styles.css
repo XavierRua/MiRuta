@@ -1886,3 +1886,66 @@ a.enlace {
   max-width: 100%;
   object-fit: contain;
 }
+
+.texto-morado {
+  color: #7c3aed;
+}
+
+/* ---------- Pausas de descanso y actividades autorizadas ---------- */
+.editor-fila.descansos {
+  grid-template-columns: 200px 250px 270px 60px;
+}
+.editor-fila .duracion em {
+  white-space: nowrap;
+  align-self: center;
+}
+.editor-fila.tipos-actividad {
+  grid-template-columns: 200px 1fr 36px;
+}
+.tabla-permisos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 760px;
+}
+.tabla-permisos .fila-permiso {
+  display: grid;
+  grid-template-columns: 1fr 200px 200px;
+  justify-items: center;
+}
+.tabla-permisos .fila-permiso > span:first-child {
+  justify-self: start;
+}
+.tabla-permisos .fila-permiso.encabezado {
+  border: none;
+  font-size: 12px;
+  color: var(--suave);
+  font-weight: 600;
+  text-align: center;
+}
+.form-actividad {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 560px;
+}
+.form-actividad label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-actividad label > span {
+  font-weight: 600;
+  font-size: 14px;
+}
+.fila-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.fila-apagada {
+  opacity: 0.55;
+}
+.resumen-pausas td strong.rojo {
+  color: #dc2626;
+}

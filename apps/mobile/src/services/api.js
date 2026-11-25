@@ -2,7 +2,13 @@
 // Hoy usa datos de ejemplo; cuando conectemos Supabase, solo cambia este archivo.
 import { INDICADORES } from '../config/indicadores';
 import { PERMISOS_POR_ROL } from '../config/permisos';
-import { ITEMS_PREOPERACIONAL, PREGUNTAS_SALUD, REGLAS_JORNADA, TIPOS_PAUSA } from '../config/formularios';
+import {
+  ITEMS_PREOPERACIONAL,
+  PREGUNTAS_SALUD,
+  REGLAS_JORNADA,
+  TIPOS_ACTIVIDAD_EJEMPLO,
+  TIPOS_PAUSA,
+} from '../config/formularios';
 import { programacionesEjemplo } from '../data/programacion';
 import {
   cuentasDemo,
@@ -18,7 +24,8 @@ import {
   yo,
 } from '../data/mock';
 import { mismoDia, soloDia } from '../utils/fechas';
-import { dentroDeLaFranja, estadoFranja, franjasDelDia } from '../utils/reportes';
+import { cierreDe, dentroDeLaFranja, estadoFranja, franjasDelDia } from '../utils/reportes';
+import { aplicarPausas, textoExtension } from '../utils/pausas';
 import { partesColombia } from '../utils/horaColombia';
 import { ahoraServidor, horaVerificada, sincronizarHora } from './horaServidor';
 
@@ -53,10 +60,41 @@ export const api = {
   getFormularios: () => ({
     preguntasSalud: PREGUNTAS_SALUD,
     itemsPreoperacional: ITEMS_PREOPERACIONAL,
-    // Con Supabase: armarTiposPausa(filas de tipos_pausa), tal como las dejó configuradas la web
+    // Con Supabase: armarDescansos(filas de tipos_pausa con clase 'descanso'), tal como las dejó la web
     tiposPausa: TIPOS_PAUSA,
+    tiposActividad: TIPOS_ACTIVIDAD_EJEMPLO,
     reglas: REGLAS_JORNADA,
   }),
+  // Actividades autorizadas para hoy (capacitación, reunión, cita médica…): las habilita en la web un perfil con
+  // el permiso "web.actividades.autorizar" para este trabajador y esta fecha. Con Supabase: tabla
+  // actividades_autorizadas (0016), en tiempo real. modo 'asignado' = alarma y cierre automático; 'libre' = cronómetro.
+  getActividadesAutorizadas: (fecha) => {
+    const dia = partesColombia(fecha);
+    if (!horarioSemana[dia.diaSemana]) return [];
+    const clave = `${dia.anio}-${dia.mes + 1}-${dia.dia}`;
+    return [
+      {
+        id: `aut-${clave}-1`,
+        tipo: 'capacitacion',
+        texto: 'Capacitación',
+        icono: 'school',
+        modo: 'asignado',
+        minutos: 60,
+        nota: 'Trabajo seguro en alturas',
+        autorizadaPor: 'Laura Gómez (SST)',
+      },
+      {
+        id: `aut-${clave}-2`,
+        tipo: 'reunion',
+        texto: 'Reunión',
+        icono: 'people',
+        modo: 'libre',
+        minutos: null,
+        nota: 'Reunión de seguridad con el cliente',
+        autorizadaPor: 'Jorge Pérez (Supervisor)',
+      },
+    ];
+  },
   // Vehículos de la empresa que puede usar (para el preoperacional)
   getVehiculosEmpresa: () => vehiculosEmpresa,
   // Horas de reporte que la empresa excluyó (capacitaciones): no cuentan para la eficiencia
@@ -113,25 +151,49 @@ export const api = {
 
   // Reportes de un día, una fila por hora del horario:
   // enviados (desde este celular o de ejemplo) y "no_reporto" para las horas que ya pasaron sin reporte
-  getReportesDia: (fecha, reportesEnviados, franjasExtra = []) => {
+  getReportesDia: (fecha, reportesEnviados, franjasExtra = [], pausas = []) => {
     const ahora = ahoraServidor();
     if (!mismoDia(fecha, ahora)) {
       const jornada = jornadas.find((j) => mismoDia(j.fecha, fecha));
       return jornada ? reportesDeEjemplo(jornada) : [];
     }
-    const franjas = [...franjasDelDia(fecha, horarioSemana[partesColombia(fecha).diaSemana]), ...franjasExtra];
+    const franjas = aplicarPausas(
+      [...franjasDelDia(fecha, horarioSemana[partesColombia(fecha).diaSemana]), ...franjasExtra],
+      pausas,
+      ahora,
+      cierreDe,
+    );
     const propios = reportesEnviados.filter((r) => mismoDia(r.enviadoEn, fecha));
+    // Horas cubiertas por una pausa completa: "En pausa – Almuerzo" (no cuentan en la eficiencia)
+    const enPausa = franjas
+      .filter((f) => f.enPausa && !propios.some((r) => r.franjaId === f.id))
+      .map((f) => ({
+        id: `${f.id}-p`,
+        franjaId: f.id,
+        franja: f.etiqueta,
+        estado: 'en_pausa',
+        pausa: f.enPausa.texto,
+      }));
     const faltantes = franjas
-      .filter((f) => estadoFranja(f, propios, ahora).estado === 'no_reporto')
-      .map((f) => ({ id: `${f.id}-x`, franjaId: f.id, franja: f.etiqueta, estado: 'no_reporto', extra: !!f.extra }));
+      .filter((f) => !f.enPausa && estadoFranja(f, propios, ahora).estado === 'no_reporto')
+      .map((f) => ({
+        id: `${f.id}-x`,
+        franjaId: f.id,
+        franja: f.etiqueta,
+        estado: 'no_reporto',
+        extra: !!f.extra,
+        extensionTexto: textoExtension(f),
+      }));
     const orden = (r) => r.franjaId.replace('extra-', '');
-    return [...propios, ...faltantes].sort((a, b) => orden(b).localeCompare(orden(a)));
+    return [...propios, ...enPausa, ...faltantes].sort((a, b) => orden(b).localeCompare(orden(a)));
   },
 
   // Con Supabase: se suben las fotos y se inserta el reporte. La base de datos vuelve a validar
   // con SU hora (now()) que el reporte llegue dentro de la franja; si no, lo rechaza.
   // En la demo se hace la misma validación con la hora del servidor obtenida por internet.
-  enviarReporte: async (reporte) => {
+  // pausas = pausas y actividades autorizadas del día. Con Supabase el servidor usa SUS registros (tabla pausas):
+  // la ventana se extiende por los minutos de pausa que cayeron dentro de ella (0016).
+  enviarReporte: async (reporte, pausas = []) => {
     if (!(await sincronizarHora()) && !horaVerificada()) {
       throw new Error('Sin conexión: no podemos verificar la hora oficial. Conéctate e intenta de nuevo.');
     }
@@ -144,11 +206,26 @@ export const api = {
     if (!franja && !(reporte.demo && !api.getHorarioDia(recibidoEn))) {
       throw new Error('Tu jornada ya terminó: no se pueden enviar más reportes hoy.');
     }
-    if (franja && !dentroDeLaFranja(franja, recibidoEn)) {
+    if (pausas.some((p) => !p.fin)) {
+      throw new Error('Estás en pausa. Podrás enviar el reporte cuando termine.');
+    }
+    const conPausas = franja ? aplicarPausas([franja], pausas, recibidoEn, cierreDe)[0] : null;
+    if (conPausas?.enPausa) {
+      throw new Error(`Toda esta hora estuviste en ${conPausas.enPausa.texto.toLowerCase()}: no necesita reporte.`);
+    }
+    if (conPausas && !dentroDeLaFranja(conPausas, recibidoEn)) {
       throw new Error(`La hora de este reporte (${reporte.franja}) ya cerró. Quedó registrado como "No reportó".`);
     }
     await espera(600); // simula la subida
-    return { ...reporte, id: `local-${Date.now()}`, enviadoEn: recibidoEn, estado: 'a_tiempo' };
+    return {
+      ...reporte,
+      id: `local-${Date.now()}`,
+      enviadoEn: recibidoEn,
+      estado: 'a_tiempo',
+      // Nota del reporte: "Extendido +15 min por desayuno" (la calcula el servidor con sus registros de pausas)
+      extensionMin: conPausas?.extensionMin ?? 0,
+      extensionTexto: textoExtension(conPausas),
+    };
   },
 
   // Vincula este celular a la cuenta del trabajador.

@@ -9,7 +9,7 @@ import {
   programarAlarmaPausa,
   programarPausasActivas,
 } from '../services/notificaciones';
-import { duracionMin } from '../config/formularios';
+import { duracionMin, textoDuracion } from '../config/formularios';
 import { enColombia } from '../utils/horaColombia';
 import { usePermisos } from './PermisosContext';
 
@@ -21,7 +21,11 @@ const vacio = (fecha) => ({
   saludInicio: null, // { respuestas, noApto, alerta, hora }
   saludFin: null,
   preoperacional: null, // { vehiculo: { uso, placa, clase }, items, fallas, picoPlaca, hora }
-  pausas: [], // [{ id, tipo, texto, inicio, finPrevisto, fin, minutos }]
+  // Pausas de descanso y actividades autorizadas (registro aparte de los reportes):
+  // [{ id, clase: 'descanso' | 'actividad', tipo, texto, icono, modo: 'asignado' | 'libre', inicio, finPrevisto,
+  //    fin, minutos, cerradaPor, actividadId, autorizadaPor }]
+  pausas: [],
+  actividadesAvisadas: [], // actividades autorizadas que ya se le notificaron
   incidentes: [], // [{ id, descripcion, fotos, puedeContinuar, hora, ubicacion }]
   gpsApagado: null, // { por, rol, hora, motivo }
 });
@@ -35,6 +39,8 @@ export function JornadaDiaProvider({ children }) {
   const [picoPlacaPropio, setPicoPlacaPropio] = useState([]); // días de la semana (0 = domingo)
   const diaRef = useRef(dia);
   const { reglas, tiposPausa } = api.getFormularios();
+  // Actividades autorizadas para hoy (la web las habilita por trabajador y fecha)
+  const [actividades, setActividades] = useState(() => api.getActividadesAutorizadas(ahoraServidor()));
 
   useEffect(() => {
     Promise.all([leerJson(ARCHIVO), leerJson(ARCHIVO_VEHICULO)])
@@ -103,15 +109,48 @@ export function JornadaDiaProvider({ children }) {
   // ---------- Pausas ----------
   const pausaActiva = dia.pausas.find((p) => !p.fin) ?? null;
 
-  const iniciarPausa = async (tipo, opcion) => {
-    if (pausaActiva) return null;
+  // Cuánto ha usado hoy de cada descanso (con la hora del servidor):
+  // { veces, minutosUsados, restanteMin (bolsa de la pausa activa), agotado }
+  const usoDescanso = (tipo, ahora = ahoraServidor()) => {
+    const hechas = diaRef.current.pausas.filter((p) => p.clase !== 'actividad' && p.tipo === tipo.id);
+    const minutosUsados = hechas.reduce((t, p) => {
+      const fin = p.fin ? new Date(p.fin) : new Date(Math.min(ahora, new Date(p.finPrevisto)));
+      return t + Math.max(0, (fin - new Date(p.inicio)) / 60000);
+    }, 0);
+    if (tipo.bolsaMin != null) {
+      const restanteMin = Math.max(0, Math.floor(tipo.bolsaMin - minutosUsados));
+      return { veces: hechas.length, minutosUsados, restanteMin, agotado: restanteMin < 1 };
+    }
+    return {
+      veces: hechas.length,
+      minutosUsados,
+      restanteMin: null,
+      agotado: tipo.veces != null && hechas.length >= tipo.veces,
+    };
+  };
+
+  // Pausa de descanso (desayuno, almuerzo, pausa activa): se cierra sola al cumplir el tiempo, con alarma.
+  // Desayuno y almuerzo: las veces por jornada configuradas (1). Pausa activa: hasta agotar la bolsa del día.
+  const iniciarPausa = async (tipo) => {
+    if (diaRef.current.pausas.some((p) => !p.fin)) return null; // una a la vez
+    const uso = usoDescanso(tipo);
+    if (uso.agotado) {
+      throw new Error(
+        tipo.bolsaMin != null
+          ? `Ya usaste los ${tipo.bolsaMin} min de pausa activa de hoy.`
+          : `Ya tomaste tu ${tipo.texto.toLowerCase()} de hoy.`,
+      );
+    }
     const inicio = ahoraServidor();
-    const minutos = duracionMin(opcion ?? tipo);
+    // Pausa activa: dura lo que le quede en la bolsa, sin pasar del máximo por pausa
+    const minutos = tipo.bolsaMin != null ? Math.min(duracionMin(tipo), uso.restanteMin) : duracionMin(tipo);
     const pausa = {
       id: `pausa-${inicio.getTime()}`,
+      clase: 'descanso',
       tipo: tipo.id,
-      opcion: opcion?.id ?? null,
-      texto: opcion ? `${tipo.texto}: ${opcion.texto}` : tipo.texto,
+      texto: tipo.texto,
+      icono: tipo.icono,
+      modo: 'asignado',
       inicio: inicio.toISOString(),
       finPrevisto: new Date(inicio.getTime() + minutos * 60000).toISOString(),
       fin: null,
@@ -123,20 +162,50 @@ export function JornadaDiaProvider({ children }) {
     return pausa;
   };
 
+  // Actividad autorizada (capacitación, reunión, cita médica…): solo si la habilitaron para hoy.
+  // Tiempo asignado: alarma y cierre automático. Tiempo libre: cronómetro, la termina el trabajador.
+  const iniciarActividad = async (aut) => {
+    if (diaRef.current.pausas.some((p) => !p.fin)) return null;
+    if (diaRef.current.pausas.some((p) => p.actividadId === aut.id)) {
+      throw new Error('Esta actividad ya la usaste hoy.');
+    }
+    const inicio = ahoraServidor();
+    const asignado = aut.modo === 'asignado';
+    const pausa = {
+      id: `act-${inicio.getTime()}`,
+      clase: 'actividad',
+      tipo: aut.tipo,
+      texto: aut.texto,
+      icono: aut.icono,
+      modo: aut.modo,
+      inicio: inicio.toISOString(),
+      finPrevisto: asignado ? new Date(inicio.getTime() + aut.minutos * 60000).toISOString() : null,
+      fin: null,
+      minutos: asignado ? aut.minutos : null,
+      actividadId: aut.id,
+      autorizadaPor: aut.autorizadaPor,
+    };
+    actualizar({ pausas: [...diaRef.current.pausas, pausa] });
+    if (asignado) await programarAlarmaPausa(pausa).catch(() => {});
+    api.enviarFormulario('actividad_inicio', pausa).catch(() => {});
+    return pausa;
+  };
+
   const cerrarPausa = useCallback(async (manual = false) => {
     const activa = diaRef.current.pausas.find((p) => !p.fin);
     if (!activa) return;
     const ahora = ahoraServidor();
-    const fin = manual ? ahora : new Date(Math.min(ahora, new Date(activa.finPrevisto)));
+    const fin = manual || !activa.finPrevisto ? ahora : new Date(Math.min(ahora, new Date(activa.finPrevisto)));
     const cerrada = { ...activa, fin: fin.toISOString(), cerradaPor: manual ? 'trabajador' : 'automatico' };
     actualizar({ pausas: diaRef.current.pausas.map((p) => (p.id === activa.id ? cerrada : p)) });
     if (manual) await cancelarAlarmaPausa().catch(() => {});
-    api.enviarFormulario('pausa_fin', cerrada).catch(() => {});
+    api.enviarFormulario(activa.clase === 'actividad' ? 'actividad_fin' : 'pausa_fin', cerrada).catch(() => {});
   }, []);
 
-  // La pausa se cierra sola al cumplirse el tiempo (la alarma ya quedó programada al iniciarla)
+  // La pausa se cierra sola al cumplirse el tiempo (la alarma ya quedó programada al iniciarla).
+  // Las actividades con tiempo libre no tienen fin previsto: las termina el trabajador.
   useEffect(() => {
-    if (!pausaActiva) return;
+    if (!pausaActiva?.finPrevisto) return;
     const revisar = () => {
       if (ahoraServidor() >= new Date(pausaActiva.finPrevisto)) cerrarPausa(false);
     };
@@ -155,6 +224,29 @@ export function JornadaDiaProvider({ children }) {
       reglas.pausaActivaCadaMin,
     ).catch(() => {});
   }, [cargado, !!dia.gpsApagado]);
+
+  // ---------- Actividades autorizadas: aviso con sonido cuando le habilitan una ----------
+  // Con Supabase llega una notificación push del servidor (trigger de 0016); aquí se revisa al abrir y cada minuto.
+  useEffect(() => {
+    if (!cargado) return;
+    const revisar = () => {
+      const lista = api.getActividadesAutorizadas(ahoraServidor());
+      setActividades(lista);
+      const nuevas = lista.filter((a) => !diaRef.current.actividadesAvisadas?.includes(a.id));
+      if (!nuevas.length) return;
+      actualizar({ actividadesAvisadas: [...(diaRef.current.actividadesAvisadas ?? []), ...nuevas.map((a) => a.id)] });
+      for (const a of nuevas) {
+        notificarAhora(
+          'Te habilitaron una actividad',
+          `${a.texto} · ${a.modo === 'asignado' ? textoDuracion(a.minutos) : 'tiempo libre'} · autorizó ${a.autorizadaPor}. Iníciala en Jornada → Actividades autorizadas.`,
+          { tipo: 'actividad', actividad: a.id },
+        ).catch(() => {});
+      }
+    };
+    revisar();
+    const id = setInterval(revisar, 60000);
+    return () => clearInterval(id);
+  }, [cargado]);
 
   // ---------- Incidentes ----------
   const reportarIncidente = async (datos) => {
@@ -209,8 +301,11 @@ export function JornadaDiaProvider({ children }) {
         picoPlacaPropio,
         guardarPicoPlaca,
         tiposPausa,
+        actividades,
+        usoDescanso,
         pausaActiva,
         iniciarPausa,
+        iniciarActividad,
         cerrarPausa,
         reportarIncidente,
         simularApagadoDemo,

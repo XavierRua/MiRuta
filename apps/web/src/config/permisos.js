@@ -12,7 +12,11 @@ export const ROLES_WEB = [
 export const PERMISOS_WEB = {
   'web.configuracion.general': { grupo: 'Configuración', texto: 'Velocidad, eficiencia y geocercas' },
   'web.formularios.configurar': { grupo: 'Configuración', texto: 'Preguntas de salud y preoperacional' },
-  'web.pausas.configurar': { grupo: 'Configuración', texto: 'Pausas y descansos del trabajador' },
+  'web.pausas.configurar': { grupo: 'Configuración', texto: 'Configurar los tiempos de las pausas' },
+  'web.actividades.autorizar': {
+    grupo: 'Pausas',
+    texto: 'Habilitar actividades autorizadas (capacitación, reunión, cita médica…)',
+  },
   'web.salud.verRespuestas': { grupo: 'Novedades', texto: 'Ver las respuestas del estado de salud' },
   'web.preoperacional.ver': { grupo: 'Novedades', texto: 'Ver los preoperacionales' },
   'web.pausas.ver': { grupo: 'Novedades', texto: 'Ver las pausas y sus informes' },
@@ -43,8 +47,8 @@ const NOVEDADES = [
 export const PERMISOS_WEB_POR_ROL = {
   superadmin: Object.keys(PERMISOS_WEB),
   admin: Object.keys(PERMISOS_WEB),
-  supervisor: [...NOVEDADES],
-  sst: [...NOVEDADES, 'web.pausas.configurar'], // la pausa activa es un tema de SST
+  supervisor: [...NOVEDADES, 'web.actividades.autorizar'],
+  sst: [...NOVEDADES, 'web.pausas.configurar', 'web.actividades.autorizar'], // la pausa activa es un tema de SST
 };
 
 // Perfiles a los que el administrador puede encender o apagar permisos (él siempre los tiene todos)

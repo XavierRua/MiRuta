@@ -107,13 +107,31 @@ function generarJornadas() {
             }
           : null,
       km: Math.round((sabado ? 18 : 45) * 10 + (semilla % 30) * 10) / 10,
-      // Pausas del día (tipo, inicio y fin)
+      // Pausas de descanso y actividades autorizadas del día (registro aparte de los reportes)
       pausas: sabado
-        ? [{ texto: 'Desayuno', inicio: '9:05', fin: '9:20' }]
+        ? [{ clase: 'descanso', texto: 'Desayuno', inicio: '9:05', fin: '9:20', minutos: 15 }]
         : [
-            { texto: 'Pausa activa', inicio: '9:0' + (semilla % 9), fin: '9:1' + (semilla % 9) },
-            { texto: 'Almuerzo', inicio: '12:0' + (semilla % 9), fin: '13:0' + (semilla % 9) },
-            ...(semilla % 4 === 0 ? [{ texto: 'Otras: Capacitación', inicio: '14:00', fin: '15:00' }] : []),
+            { clase: 'descanso', texto: 'Desayuno', inicio: '8:00', fin: '8:15', minutos: 15 },
+            {
+              clase: 'descanso',
+              texto: 'Pausa activa',
+              inicio: '10:0' + (semilla % 9),
+              fin: '10:1' + (semilla % 9),
+              minutos: 10,
+            },
+            { clase: 'descanso', texto: 'Almuerzo', inicio: '12:00', fin: '13:00', minutos: 60 },
+            ...(semilla % 4 === 0
+              ? [
+                  {
+                    clase: 'actividad',
+                    texto: 'Capacitación',
+                    inicio: '14:00',
+                    fin: '15:00',
+                    minutos: 60,
+                    autorizadaPor: 'Laura Gómez (SST)',
+                  },
+                ]
+              : []),
           ],
       // Cómo se desplazó: km y segundos a pie, en vehículo y quieto
       desplazamiento: {
@@ -173,8 +191,22 @@ export function reportesDeEjemplo(jornada) {
     inicio.setHours(7 + k, 0, 0, 0);
     const franja = `${7 + k}:00 – ${8 + k}:00`;
     const lugar = jornada.lugares[k % jornada.lugares.length];
+    // 12:00 – 13:00: toda la hora en almuerzo → "En pausa – Almuerzo" (no necesita reporte)
+    if (7 + k === 12 && jornada.fecha.getDay() !== 6) {
+      lista.push({
+        id: `${inicio.toISOString()}-p`,
+        franjaId: inicio.toISOString(),
+        franja,
+        estado: 'en_pausa',
+        pausa: 'Almuerzo',
+        ejemplo: true,
+      });
+      continue;
+    }
+    // 8:00 – 9:00: desayuno de 8:00 a 8:15 → se envió a las 9:10, dentro de la ventana extendida
+    const desayuno = 7 + k === 8;
     // horas sin reporte de ese día (siempre las mismas para que el ejemplo sea estable)
-    if (faltan > 0 && k % Math.ceil(jornada.reportesEsperados / faltan) === jornada.fecha.getDate() % 3) {
+    if (!desayuno && faltan > 0 && k % Math.ceil(jornada.reportesEsperados / faltan) === jornada.fecha.getDate() % 3) {
       lista.push({
         id: `${inicio.toISOString()}-x`,
         franjaId: inicio.toISOString(),
@@ -188,8 +220,9 @@ export function reportesDeEjemplo(jornada) {
       id: `${inicio.toISOString()}-${k}`,
       franjaId: inicio.toISOString(),
       franja,
-      enviadoEn: new Date(inicio.getTime() + (20 + ((k * 7) % 35)) * 60 * 1000),
+      enviadoEn: new Date(inicio.getTime() + (desayuno ? 70 : 20 + ((k * 7) % 35)) * 60 * 1000),
       estado: 'a_tiempo',
+      ...(desayuno ? { extensionMin: 15, extensionTexto: 'Extendido +15 min por desayuno' } : {}),
       descripcion: tareas[(k + jornada.fecha.getDate()) % tareas.length],
       lugar: lugar.nombre,
       ubicacion: { lat: 6.25 + k * 0.002, lng: -75.57 + k * 0.002, precisionM: 8, direccion: null, simulada: false },

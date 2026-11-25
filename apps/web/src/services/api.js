@@ -21,6 +21,7 @@ import {
 // Reportes esperados y enviados por trabajador y día (índice para calcular la eficiencia rápido)
 const reportesPorDia = new Map();
 reportesActividad.forEach((r) => {
+  if (r.estado === 'en_pausa') return; // hora cubierta por una pausa: no cuenta en la eficiencia
   const clave = `${r.trabajadorId}|${aTextoFecha(r.fecha)}`;
   const c = reportesPorDia.get(clave) ?? { esperados: 0, enviados: 0 };
   c.esperados += 1;

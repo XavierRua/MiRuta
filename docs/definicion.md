@@ -144,3 +144,20 @@
 - **Menú lateral (☰)**: arriba "Seguridad" (cambiar contraseña = PIN, y eliminar la cuenta, que salió de Mi perfil); abajo Política de privacidad, Términos y condiciones, Tratamiento de datos personales y Cerrar sesión (también salió de Mi perfil). Pie: Xavier Rúa Domínguez · Medellín, Colombia · xavier.rua@gmail.com · © Todos los derechos reservados · Versión (se toma sola de `app.json`).
 - **Permisos de la app**: `notificaciones.ver`, `seguridad.cambiarPin`, `perfil.solicitarEliminacion`.
 - **Servidor**: migración 0015.
+
+## Pausas, actividades autorizadas y extensión de la ventana de reporte
+
+- **Tiempos por empresa** (web → Configuración → Pausas de descanso; permiso `web.pausas.configurar`): duración del desayuno y del almuerzo y cuántas veces por jornada (1 por defecto: no se pueden repetir). La **pausa activa es una bolsa de minutos del día** (por defecto 30) que el trabajador reparte como quiera (por ejemplo 6 pausas de 5 min), con un máximo por pausa (por defecto 10); si termina antes, lo que no usó queda en la bolsa.
+- **Pausas de descanso**: el trabajador marca el inicio; se cierran solas al cumplir el tiempo, con alarma. Durante la pausa el botón "Enviar reporte" se desactiva y no suenan recordatorios de reporte.
+- **Extensión**: las ventanas siguen fijas en pantalla (8:00–9:00, 9:00–10:00…). La pausa solo extiende la ventana en la que cae, exactamente por los minutos que cayeron dentro de ella:
+  - desayuno 8:00–8:15 → la ventana de 8:00 cierra a las 9:15; la de 9:00 sigue igual;
+  - desayuno 8:50–9:05 → ventana 8:00 hasta 9:10 y ventana 9:00 hasta 10:05;
+  - varias pausas en una ventana: se suman;
+  - pausa que cubre toda la ventana (almuerzo de 12:00 a 13:00): "En pausa – Almuerzo", no se pide ni cuenta en la eficiencia;
+  - última ventana: la extensión se suma a su cierre (fin + hora de más) y la jornada cierra al vencer;
+  - si vence la extensión sin reporte: "No reportó" (sí afecta la eficiencia).
+- **Mensajes** en la tarjeta de reportes: durante la pausa "Desayuno en curso. Tienes +15 min para enviar el reporte." (o "Estás en capacitación. Tienes +30 min…"); al terminar, "Ventana 8:00 extendida hasta las 9:15 por desayuno"; si cae entre dos ventanas, la extensión de cada una.
+- **Actividades autorizadas** (capacitación, reunión, cita médica, diligencia autorizada y las que se agreguen): solo aparecen en la app cuando un perfil con el permiso `web.actividades.autorizar` las habilita en la web (menú Actividades autorizadas) a un trabajador para una fecha, con **tiempo libre** (cronómetro, la termina el trabajador) o **tiempo asignado** (alarma y cierre automático). El trabajador recibe una notificación con sonido. Funcionan con la misma extensión de las pausas.
+- **Dos registros separados**: (a) el reporte de actividad con su nota ("Reporte 8:00–9:00 · Enviado a las 9:10 · Extendido +15 min por desayuno") y (b) el registro de pausas y actividades (tipo, inicio, fin, duración y quién autorizó). Los dos se ven en el historial de la app y en la web (Reportes de actividad; Novedades → Pausas y actividades, con resumen por trabajador —tiempo total de descanso, almuerzo promedio, quién excede el almuerzo— y descarga en Excel o PDF; Historial y km).
+- **Permisos independientes**: `web.pausas.configurar` y `web.actividades.autorizar` en la web; `pausas.usar` y `actividades.usar` en la app.
+- **Servidor**: migración 0016 (todas las validaciones con `now()` y hora de Colombia).

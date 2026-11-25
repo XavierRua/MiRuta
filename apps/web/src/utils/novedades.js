@@ -8,7 +8,14 @@ const hm = (min) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')
 const FIN_JORNADA = 17 * 60;
 const TIPOS_VEH = { Moto: 'moto', Carro: 'carro', Camioneta: 'camion', Camion: 'camion' };
 
-export function generarNovedades(trabajadores, desde, hasta, apagadosManuales = [], vehiculos = []) {
+// config = { descansos, actividades }: tiempos configurados y actividades autorizadas desde la web
+export function generarNovedades(trabajadores, desde, hasta, apagadosManuales = [], vehiculos = [], config = {}) {
+  const descansos = config.descansos ?? [];
+  const actividades = config.actividades ?? [];
+  const cfg = (id) => {
+    const d = descansos.find((x) => x.id === id && x.activo !== false);
+    return d && { texto: d.texto, min: d.unidad === 'h' ? Math.round(d.duracion * 60) : d.duracion, bolsa: d.bolsaMin };
+  };
   const r = { salud: [], preoperacional: [], pausas: [], incidentes: [], apagados: [], notificaciones: [] };
   const hoyTexto = aTextoFecha(new Date());
   for (let d = new Date(desde); d <= hasta; d.setDate(d.getDate() + 1)) {
@@ -66,26 +73,74 @@ export function generarNovedades(trabajadores, desde, hasta, apagadosManuales = 
           alerta: fallas.length > 0,
         });
 
-      // Pausas
+      // Pausas de descanso (desayuno, almuerzo, pausa activa) y actividades autorizadas
       if (!noApto) {
-        const pausas = sabado
-          ? [['Desayuno', 9 * 60 + (s % 10), 15]]
+        const ahoraMin = new Date().getHours() * 60 + new Date().getMinutes();
+        const desc = (id) => cfg(id);
+        const items = sabado
+          ? [['desayuno', 9 * 60 + (s % 10)]]
           : [
-              ['Pausa activa', 9 * 60 + (s % 9), 10],
-              ['Almuerzo', 12 * 60 + (s % 9), 60],
-              ...(s % 4 === 0 ? [['Otras: Capacitación', 14 * 60, 60]] : []),
-              ['Pausa activa', 15 * 60 + (s % 9), 10],
+              ['desayuno', 8 * 60 + (s % 5 === 0 ? 20 : 0)],
+              // Pausa activa: varias cortas que salen de la bolsa del día (p. ej. 30 min)
+              ['pausa_activa', 9 * 60 + 40 + (s % 9), 5 + (s % 4)],
+              ['pausa_activa', 10 * 60 + 50 + (s % 9), 8],
+              ['almuerzo', 12 * 60],
+              ['pausa_activa', 15 * 60 + (s % 9), 4 + (s % 6)],
+              ['pausa_activa', 16 * 60 + 10, 5],
             ];
-        for (const [tipo, ini, min] of pausas)
-          if (!esHoy || ini + min <= new Date().getHours() * 60 + new Date().getMinutes())
-            r.pausas.push({
-              ...base,
-              tipo,
-              inicio: hm(ini),
-              fin: hm(ini + min),
-              minutos: min,
-              cierre: s % 7 === 0 ? 'Manual' : 'Automático',
-            });
+        const usado = {};
+        for (const [id, ini, durDemo] of items) {
+          const d = desc(id);
+          if (!d) continue;
+          const volvioAntes = s % 7 === 0 && !durDemo && d.min > 5;
+          const min = durDemo ?? (volvioAntes ? d.min - 3 : d.min);
+          if (esHoy && ini + min > ahoraMin) continue;
+          const antes = usado[id] ?? 0;
+          usado[id] = antes + min;
+          // exceso = lo que pasa del tiempo del día (pausa activa: de la bolsa)
+          const tope = id === 'pausa_activa' ? (d.bolsa ?? d.min * 3) : d.min;
+          r.pausas.push({
+            ...base,
+            clase: 'Descanso',
+            tipo: d.texto,
+            inicio: hm(ini),
+            fin: hm(ini + min),
+            minutos: min,
+            configurado: d.bolsa ? `máx. ${d.min} min (bolsa ${d.bolsa})` : `${d.min} min`,
+            exceso: Math.max(0, usado[id] - tope) - Math.max(0, antes - tope),
+            cierre: volvioAntes
+              ? 'Manual (volvió antes)'
+              : durDemo && durDemo < d.min
+                ? 'Manual (terminó)'
+                : 'Automático',
+            autorizo: '—',
+          });
+        }
+        // Actividades autorizadas habilitadas desde la web para ese día (y una capacitación de ejemplo)
+        const habilitadas = actividades.filter(
+          (a) => a.trabajadorId === t.id && a.fecha === f && a.estado === 'habilitada',
+        );
+        const ejemplo =
+          !sabado && s % 4 === 0
+            ? [{ texto: 'Capacitación', modo: 'asignado', minutos: 60, autorizadaPor: 'Laura Gómez (SST)' }]
+            : [];
+        [...habilitadas, ...ejemplo].forEach((a, k) => {
+          const ini = 14 * 60 + k * 90;
+          const min = a.modo === 'asignado' ? a.minutos : 35 + (s % 45);
+          if (esHoy && ini + min > ahoraMin) return;
+          r.pausas.push({
+            ...base,
+            clase: 'Actividad autorizada',
+            tipo: a.texto,
+            inicio: hm(ini),
+            fin: hm(ini + min),
+            minutos: min,
+            configurado: a.modo === 'asignado' ? `${a.minutos} min` : 'Libre',
+            exceso: 0,
+            cierre: a.modo === 'asignado' ? 'Automático' : 'Manual',
+            autorizo: a.autorizadaPor,
+          });
+        });
       }
 
       // Incidentes
@@ -220,4 +275,52 @@ export function ausentismo(n) {
       .map((r) => ({ ...r, dias: r.dias.size, horas: Math.round(r.horas * 10) / 10 }))
       .sort((a, b) => b.horas - a.horas),
   };
+}
+
+// Resumen de pausas y actividades por trabajador (tiempo total de descanso, quién excede el almuerzo…)
+export function resumenPausas(n) {
+  const porPersona = new Map();
+  for (const p of n.pausas) {
+    const r = porPersona.get(p.persona) ?? {
+      persona: p.persona,
+      descansoMin: 0,
+      almuerzoMin: 0,
+      diasAlmuerzo: new Set(),
+      excesoAlmuerzo: 0,
+      diasExceso: new Set(),
+      pausasActivas: 0,
+      pausaActivaMin: 0,
+      diasPausaActiva: new Set(),
+      actividadesMin: 0,
+    };
+    if (p.clase === 'Descanso') {
+      r.descansoMin += p.minutos;
+      if (p.tipo === 'Almuerzo') {
+        r.almuerzoMin += p.minutos;
+        r.diasAlmuerzo.add(p.fecha.toDateString());
+        if (p.exceso > 0) {
+          r.excesoAlmuerzo += p.exceso;
+          r.diasExceso.add(p.fecha.toDateString());
+        }
+      }
+      if (p.tipo === 'Pausa activa') {
+        r.pausasActivas += 1;
+        r.pausaActivaMin += p.minutos;
+        r.diasPausaActiva.add(p.fecha.toDateString());
+      }
+    } else r.actividadesMin += p.minutos;
+    porPersona.set(p.persona, r);
+  }
+  return [...porPersona.values()]
+    .map((r) => ({
+      persona: r.persona,
+      descansoH: Math.round((r.descansoMin / 60) * 10) / 10,
+      almuerzoPromedio: r.diasAlmuerzo.size ? Math.round(r.almuerzoMin / r.diasAlmuerzo.size) : 0,
+      diasExceso: r.diasExceso.size,
+      excesoAlmuerzo: r.excesoAlmuerzo,
+      pausasActivas: r.pausasActivas,
+      pausaActivaDia: r.diasPausaActiva.size ? Math.round(r.pausaActivaMin / r.diasPausaActiva.size) : 0,
+      actividadesH: Math.round((r.actividadesMin / 60) * 10) / 10,
+    }))
+    .sort((a, b) => b.excesoAlmuerzo - a.excesoAlmuerzo || a.persona.localeCompare(b.persona));
 }

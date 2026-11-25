@@ -10,8 +10,9 @@ import { api } from '../services/api';
 const estados = {
   a_tiempo: { texto: 'Reportó', clase: 'ok' },
   no_reporto: { texto: 'No reportó', clase: 'danger' },
+  en_pausa: { texto: 'En pausa', clase: 'morado' },
 };
-const filtrosEstado = ['todos', 'a_tiempo', 'no_reporto'];
+const filtrosEstado = ['todos', 'a_tiempo', 'no_reporto', 'en_pausa'];
 const POR_PAGINA = 50;
 
 // "2026-11-23" ⇄ Date local a las 00:00
@@ -67,7 +68,9 @@ export default function ReportesScreen() {
 
   const cuenta = (e) => todos.filter((r) => r.estado === e).length;
   const recibidos = cuenta('a_tiempo');
-  const pct = todos.length ? Math.round((cuenta('a_tiempo') / todos.length) * 100) : 0;
+  // Las horas "En pausa" (cubiertas por una pausa completa) no cuentan en el cumplimiento
+  const esperados = todos.length - cuenta('en_pausa');
+  const pct = esperados ? Math.round((recibidos / esperados) * 100) : 0;
   const pesoMB = (todos.reduce((s, r) => s + r.pesoKB, 0) / 1024).toFixed(1);
 
   const cambiar = (fn) => (e) => {
@@ -158,7 +161,7 @@ export default function ReportesScreen() {
             <div className="kpi">
               <span>Reportes recibidos</span>
               <strong>
-                {recibidos} / {todos.length}
+                {recibidos} / {esperados}
               </strong>
             </div>
             <div className="kpi">
@@ -201,6 +204,8 @@ export default function ReportesScreen() {
                           {r.franja}
                           {r.enviadoEn && ` · enviado ${hora(r.enviadoEn)}`}
                         </small>
+                        {/* Ventana extendida por una pausa: "Extendido +15 min por desayuno" */}
+                        {r.extension && <small className="bloque texto-morado">{r.extension}</small>}
                       </td>
                       <td>
                         <div className="celda-persona">
@@ -211,10 +216,19 @@ export default function ReportesScreen() {
                         </div>
                       </td>
                       <td>
-                        <span className={`chip ${estados[r.estado].clase}`}>{estados[r.estado].texto}</span>
+                        <span className={`chip ${estados[r.estado].clase}`}>
+                          {r.estado === 'en_pausa' ? `En pausa – ${r.pausa}` : estados[r.estado].texto}
+                        </span>
                       </td>
-                      <td className="celda-texto">{r.descripcion ?? <em className="nota">Sin reporte</em>}</td>
-                      <td>{r.estado === 'no_reporto' ? '—' : r.lugar}</td>
+                      <td className="celda-texto">
+                        {r.descripcion ??
+                          (r.estado === 'en_pausa' ? (
+                            <em className="nota">Toda la hora en pausa: no necesitaba reporte</em>
+                          ) : (
+                            <em className="nota">Sin reporte</em>
+                          ))}
+                      </td>
+                      <td>{r.estado !== 'a_tiempo' ? '—' : r.lugar}</td>
                       <td>
                         {r.fotos > 0 && (
                           <span className="fotos-cuenta">
@@ -223,7 +237,7 @@ export default function ReportesScreen() {
                         )}
                       </td>
                       <td>
-                        {r.estado !== 'no_reporto' && (
+                        {r.estado === 'a_tiempo' && (
                           <button className="btn peq" onClick={() => setAbierto(r)}>
                             Ver
                           </button>

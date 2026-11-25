@@ -6,7 +6,7 @@ import { useEmpresa } from '../hooks/useEmpresa';
 import { api } from '../services/api';
 import { descargarExcel, descargarPdf } from '../utils/exportar';
 import { deTextoFecha, validarRango } from '../utils/fechas';
-import { ausentismo, generarNovedades } from '../utils/novedades';
+import { ausentismo, generarNovedades, resumenPausas } from '../utils/novedades';
 import { fechaCorta } from '../utils/filtrosHistorial';
 import { usePermisos } from '../context/PermisosContext';
 
@@ -14,7 +14,7 @@ import { usePermisos } from '../context/PermisosContext';
 const PESTANAS = [
   { id: 'salud', texto: 'Estado de salud', permiso: 'web.salud.verRespuestas' },
   { id: 'preoperacional', texto: 'Preoperacional', permiso: 'web.preoperacional.ver' },
-  { id: 'pausas', texto: 'Pausas', permiso: 'web.pausas.ver' },
+  { id: 'pausas', texto: 'Pausas y actividades', permiso: 'web.pausas.ver' },
   { id: 'incidentes', texto: 'Incidentes', permiso: 'web.incidentes.ver' },
   { id: 'apagados', texto: 'GPS apagados', permiso: 'web.ausentismo.ver' },
   { id: 'notificaciones', texto: 'Notificaciones', permiso: 'web.notificaciones.ver' },
@@ -45,14 +45,27 @@ const COLUMNAS = {
       (x) => chip(!x.fallas.length, 'Todo bien', `Falla: ${x.fallas.join(', ')}`),
     ],
   ],
+  // Registro de pausas y actividades autorizadas (independiente de los reportes de actividad)
   pausas: [
     ['Fecha', (x) => fechaCorta(x.fecha)],
     ['Trabajador', (x) => x.persona],
+    [
+      'Clase',
+      (x) => x.clase,
+      (x) => <span className={`chip ${x.clase === 'Descanso' ? 'morado' : 'info'}`}>{x.clase}</span>,
+    ],
     ['Tipo', (x) => x.tipo],
     ['Inicio', (x) => x.inicio],
     ['Fin', (x) => x.fin],
-    ['Minutos', (x) => x.minutos],
+    ['Duración (min)', (x) => x.minutos],
+    ['Configurado', (x) => x.configurado],
+    [
+      'Exceso (min)',
+      (x) => x.exceso || 0,
+      (x) => (x.exceso ? <strong className="texto-danger">+{x.exceso}</strong> : '—'),
+    ],
     ['Cierre', (x) => x.cierre],
+    ['Autorizó', (x) => x.autorizo],
   ],
   incidentes: [
     ['Fecha', (x) => fechaCorta(x.fecha)],
@@ -97,7 +110,7 @@ const COLUMNAS = {
 // Novedades de la jornada del trabajador e informe de ausentismo, por trabajador y período, con descarga
 export default function NovedadesScreen() {
   const { empresaId, trabajadores } = useEmpresa();
-  const { apagados } = useNovedades();
+  const { apagados, formularios, actividades } = useNovedades();
   const { puede } = usePermisos();
   const visibles = PESTANAS.filter((p) => puede(p.permiso));
   const [elegida, setPestana] = useState('salud');
@@ -115,9 +128,21 @@ export default function NovedadesScreen() {
       deTextoFecha(filtro.hasta),
       apagados,
       api.getVehiculos(empresaId),
+      { descansos: formularios.descansos, actividades },
     );
-  }, [trab, filtro, error, apagados, empresaId, trabajadores.length]);
+  }, [trab, filtro, error, apagados, empresaId, trabajadores.length, formularios, actividades]);
   const aus = useMemo(() => (datos ? ausentismo(datos) : { eventos: [], resumen: [] }), [datos]);
+  const resPausas = useMemo(() => (datos ? resumenPausas(datos) : []), [datos]);
+  const COLS_RESUMEN_PAUSAS = [
+    'Trabajador',
+    'Descanso total (h)',
+    'Almuerzo promedio (min)',
+    'Días con almuerzo excedido',
+    'Minutos excedidos',
+    'Pausas activas',
+    'Pausa activa por día (min)',
+    'Actividades autorizadas (h)',
+  ];
   const filas = !datos ? [] : pestana === 'ausentismo' ? aus.eventos : datos[pestana];
   const cols = COLUMNAS[pestana];
   const titulo = PESTANAS.find((p) => p.id === pestana).texto;
@@ -132,6 +157,26 @@ export default function NovedadesScreen() {
             filas: [
               ['Trabajador', 'Novedades', 'Días afectados', 'Horas perdidas'],
               ...aus.resumen.map((r) => [r.persona, r.eventos, r.dias, r.horas]),
+            ],
+          },
+        ]
+      : []),
+    ...(pestana === 'pausas'
+      ? [
+          {
+            titulo: 'Resumen por trabajador',
+            filas: [
+              COLS_RESUMEN_PAUSAS,
+              ...resPausas.map((r) => [
+                r.persona,
+                r.descansoH,
+                r.almuerzoPromedio,
+                r.diasExceso,
+                r.excesoAlmuerzo,
+                r.pausasActivas,
+                r.pausaActivaDia,
+                r.actividadesH,
+              ]),
             ],
           },
         ]
@@ -155,9 +200,22 @@ export default function NovedadesScreen() {
           ['En vehículo de la empresa', datos.preoperacional.filter((x) => x.uso === 'Empresa').length],
         ],
         pausas: [
-          ['Pausas', datos.pausas.length],
+          [
+            'Tiempo total de descanso',
+            `${Math.round((datos.pausas.filter((x) => x.clase === 'Descanso').reduce((t, x) => t + x.minutos, 0) / 60) * 10) / 10} h`,
+          ],
           ['Pausas activas', datos.pausas.filter((x) => x.tipo === 'Pausa activa').length],
-          ['Horas en pausa', Math.round((datos.pausas.reduce((t, x) => t + x.minutos, 0) / 60) * 10) / 10],
+          [
+            'Almuerzos excedidos',
+            datos.pausas.filter((x) => x.tipo === 'Almuerzo' && x.exceso > 0).length,
+            'texto-danger',
+          ],
+          [
+            'Horas en actividades autorizadas',
+            Math.round(
+              (datos.pausas.filter((x) => x.clase !== 'Descanso').reduce((t, x) => t + x.minutos, 0) / 60) * 10,
+            ) / 10,
+          ],
         ],
         incidentes: [
           ['Incidentes', datos.incidentes.length, 'texto-danger'],
@@ -240,6 +298,51 @@ export default function NovedadesScreen() {
               </div>
             ))}
           </div>
+
+          {pestana === 'pausas' && (
+            <section className="panel">
+              <h2>Resumen por trabajador</h2>
+              <div className="tabla-scroll">
+                <table className="resumen-pausas">
+                  <thead>
+                    <tr>
+                      {COLS_RESUMEN_PAUSAS.map((c) => (
+                        <th key={c}>{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resPausas.map((r) => (
+                      <tr key={r.persona}>
+                        <td>{r.persona}</td>
+                        <td>
+                          <strong>{r.descansoH} h</strong>
+                        </td>
+                        <td>{r.almuerzoPromedio} min</td>
+                        <td>{r.diasExceso || '—'}</td>
+                        <td>{r.excesoAlmuerzo ? <strong className="rojo">+{r.excesoAlmuerzo} min</strong> : '—'}</td>
+                        <td>{r.pausasActivas}</td>
+                        <td>{r.pausaActivaDia} min</td>
+                        <td>{r.actividadesH} h</td>
+                      </tr>
+                    ))}
+                    {resPausas.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="vacio">
+                          Sin pausas en este período.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <small className="nota">
+                El desayuno y el almuerzo se toman las veces por jornada configuradas y se cierran solos, y la pausa
+                activa sale de una bolsa de minutos del día: la app no deja pasarse. Si aparece un exceso, es por un
+                cambio de la configuración en el período.
+              </small>
+            </section>
+          )}
 
           {pestana === 'ausentismo' && (
             <section className="panel">

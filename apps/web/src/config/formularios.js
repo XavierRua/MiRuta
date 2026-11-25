@@ -31,57 +31,30 @@ export const FORMULARIOS_DEFECTO = {
       fija: true,
     },
   ],
-  // Pausas: grupo "principal" (tarjeta propia en la app) u "otras" (dentro de la tarjeta Otras).
+  // Pausas de descanso (por empresa): el trabajador las inicia y se cierran solas al cumplir el tiempo.
   // duracion + unidad ('min' u 'h'); el ícono es el nombre de Ionicons que usa la app.
-  tiposPausa: [
-    { id: 'desayuno', texto: 'Desayuno', icono: 'cafe', grupo: 'principal', duracion: 15, unidad: 'min', activo: true },
-    {
-      id: 'almuerzo',
-      texto: 'Almuerzo',
-      icono: 'restaurant',
-      grupo: 'principal',
-      duracion: 1,
-      unidad: 'h',
-      activo: true,
-    },
+  //   veces: cuántas veces por jornada (desayuno y almuerzo: 1)
+  //   Pausa activa: BOLSA de minutos del día (bolsaMin) que el trabajador reparte como quiera;
+  //   su duracion es el máximo por pausa.
+  descansos: [
+    { id: 'desayuno', texto: 'Desayuno', icono: 'cafe', duracion: 15, unidad: 'min', veces: 1, activo: true },
+    { id: 'almuerzo', texto: 'Almuerzo', icono: 'restaurant', duracion: 1, unidad: 'h', veces: 1, activo: true },
     {
       id: 'pausa_activa',
       texto: 'Pausa activa',
       icono: 'body',
-      grupo: 'principal',
       duracion: 10,
       unidad: 'min',
-      activo: true,
-      fija: true,
-    },
-    {
-      id: 'capacitacion',
-      texto: 'Capacitación',
-      icono: 'school',
-      grupo: 'otras',
-      duracion: 1,
-      unidad: 'h',
+      bolsaMin: 30,
       activo: true,
     },
-    { id: 'reunion', texto: 'Reunión', icono: 'people', grupo: 'otras', duracion: 30, unidad: 'min', activo: true },
-    {
-      id: 'cita_medica',
-      texto: 'Cita médica',
-      icono: 'medkit',
-      grupo: 'otras',
-      duracion: 5,
-      unidad: 'h',
-      activo: true,
-    },
-    {
-      id: 'diligencia',
-      texto: 'Diligencia autorizada',
-      icono: 'document-text',
-      grupo: 'otras',
-      duracion: 30,
-      unidad: 'min',
-      activo: true,
-    },
+  ],
+  // Tipos de actividad autorizada: solo aparecen en la app cuando se habilitan a un trabajador para una fecha
+  tiposActividad: [
+    { id: 'capacitacion', texto: 'Capacitación', icono: 'school' },
+    { id: 'reunion', texto: 'Reunión', icono: 'people' },
+    { id: 'cita_medica', texto: 'Cita médica', icono: 'medkit' },
+    { id: 'diligencia', texto: 'Diligencia autorizada', icono: 'document-text' },
   ],
   pausaActivaCadaMin: 120,
   limiteFormulariosMin: 30,
@@ -114,21 +87,42 @@ export function textoDuracion(min) {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
-// Pausas guardadas con el formato anterior ({ texto: 'Otras: X', minutos }) → formato actual
-export function normalizarPausas(lista = []) {
-  return lista.map((p) => {
-    if (p.duracion != null) return p;
-    const otras = p.texto?.startsWith('Otras: ');
-    const min = p.minutos ?? 15;
+// Configuración guardada con formatos anteriores (tiposPausa con grupo "otras") → formato actual:
+// los descansos quedan como descansos y las "otras" pasan a ser tipos de actividad autorizada
+export function normalizarPausas(f) {
+  if (!f.tiposPausa) return completarDescansos(f); // ya está en el formato actual
+  const viejas = f.tiposPausa ?? [];
+  const base = FORMULARIOS_DEFECTO;
+  const descansos = base.descansos.map((d) => {
+    const v = viejas.find((x) => x.id === d.id);
+    if (!v) return d;
+    const min = v.duracion != null ? (v.unidad === 'h' ? v.duracion * 60 : v.duracion) : (v.minutos ?? 15);
     return {
-      id: p.id,
-      texto: otras ? p.texto.slice(7) : p.texto,
-      icono: p.icono ?? 'pause',
-      grupo: otras ? 'otras' : 'principal',
+      ...d,
       duracion: min >= 60 && min % 60 === 0 ? min / 60 : min,
       unidad: min >= 60 && min % 60 === 0 ? 'h' : 'min',
-      activo: true,
-      fija: p.id === 'pausa_activa' || undefined,
+      activo: v.activo !== false,
     };
   });
+  const otras = viejas
+    .filter((x) => x.grupo === 'otras' || x.texto?.startsWith('Otras: '))
+    .map((x) => ({ id: x.id, texto: x.texto.replace(/^Otras: /, ''), icono: x.icono ?? 'pause' }));
+  const { tiposPausa, ...resto } = f;
+  return completarDescansos({ ...resto, descansos, tiposActividad: otras.length ? otras : base.tiposActividad });
+}
+
+// Completa los datos nuevos (veces por jornada y bolsa de la pausa activa) en configuraciones guardadas antes.
+// Si antes se usaba "N pausas activas por jornada", la bolsa queda en N × la duración de cada una.
+function completarDescansos(f) {
+  if (!f.descansos) return f;
+  const { pausasActivasMax, ...resto } = f;
+  const descansos = f.descansos.map((d) => {
+    const base = FORMULARIOS_DEFECTO.descansos.find((x) => x.id === d.id) ?? {};
+    const bolsa =
+      d.id === 'pausa_activa' && d.bolsaMin == null && pausasActivasMax != null
+        ? { bolsaMin: pausasActivasMax * (d.unidad === 'h' ? d.duracion * 60 : d.duracion) }
+        : {};
+    return { ...base, ...d, ...bolsa };
+  });
+  return { ...resto, descansos };
 }

@@ -39,41 +39,47 @@ export const ITEMS_PREOPERACIONAL = [
   },
 ];
 
-// Pausas y descansos. Las configura en la web el administrador o los perfiles con el permiso
-// "web.pausas.configurar" (Configuración → Pausas y descansos del trabajador); la app las recibe como una lista
-// y arma las tarjetas con armarTiposPausa. Estas son las de ejemplo mientras no hay servidor.
-//   grupo: 'principal' = tarjeta propia · 'otras' = dentro de la tarjeta "Otras"
+// ---------- Pausas de descanso y actividades autorizadas ----------
+// Las configura en la web el perfil con el permiso "web.pausas.configurar" (administrador, y supervisor o SST si
+// el administrador se lo da): Configuración → Pausas y descansos. La app las recibe y arma las tarjetas.
+// Estos son los valores de ejemplo mientras no hay servidor.
 //   duración: `minutos` o `horas` (se aceptan decimales: 1.5 = 1 h 30 min); la web envía duracion + unidad
 //   activo: false = no se muestra en la app
-export const PAUSAS_EJEMPLO = [
-  { id: 'desayuno', texto: 'Desayuno', icono: 'cafe', grupo: 'principal', minutos: 15 },
-  { id: 'almuerzo', texto: 'Almuerzo', icono: 'restaurant', grupo: 'principal', horas: 1 },
-  { id: 'pausa_activa', texto: 'Pausa activa', icono: 'body', grupo: 'principal', minutos: 10 },
-  { id: 'capacitacion', texto: 'Capacitación', icono: 'school', grupo: 'otras', horas: 1 },
-  { id: 'reunion', texto: 'Reunión', icono: 'people', grupo: 'otras', minutos: 30 },
-  { id: 'cita_medica', texto: 'Cita médica', icono: 'medkit', grupo: 'otras', horas: 5 },
-  { id: 'diligencia', texto: 'Diligencia autorizada', icono: 'document-text', grupo: 'otras', minutos: 30 },
+
+// Pausas de descanso: el trabajador las inicia cuando quiere; se cierran solas al cumplir el tiempo (alarma).
+//   veces: cuántas veces por jornada (desayuno y almuerzo: 1 → no se pueden repetir)
+//   Pausa activa = BOLSA de minutos del día (bolsaMin, p. ej. 30): las toma cuando quiera y del largo que quiera;
+//   lo que usa se descuenta de la bolsa. `minutos` es el máximo por pausa (que no se tome los 30 de una vez).
+export const DESCANSOS_EJEMPLO = [
+  { id: 'desayuno', texto: 'Desayuno', icono: 'cafe', minutos: 15, veces: 1 },
+  { id: 'almuerzo', texto: 'Almuerzo', icono: 'restaurant', horas: 1, veces: 1 },
+  { id: 'pausa_activa', texto: 'Pausa activa', icono: 'body', minutos: 10, bolsaMin: 30 },
 ];
 
-// Duración de una pausa en minutos: { minutos }, { horas } o { duracion, unidad: 'min' | 'h' } (formato de la web)
+// Tipos de actividad autorizada. NO aparecen solas: solo cuando un perfil con el permiso
+// "web.actividades.autorizar" se la habilita a un trabajador para una fecha (con tiempo libre o asignado).
+export const TIPOS_ACTIVIDAD_EJEMPLO = [
+  { id: 'capacitacion', texto: 'Capacitación', icono: 'school' },
+  { id: 'reunion', texto: 'Reunión', icono: 'people' },
+  { id: 'cita_medica', texto: 'Cita médica', icono: 'medkit' },
+  { id: 'diligencia', texto: 'Diligencia autorizada', icono: 'document-text' },
+];
+
+// Duración en minutos: { minutos }, { horas } o { duracion, unidad: 'min' | 'h' } (formato de la web)
 export const duracionMin = (p) =>
   p.minutos ??
   (p.duracion != null ? Math.round(p.unidad === 'h' ? p.duracion * 60 : p.duracion) : Math.round((p.horas ?? 0) * 60));
 
-// Lista de pausas (de la web o del servidor) → tarjetas de la app: las principales y, si hay, la tarjeta "Otras"
-export function armarTiposPausa(lista = []) {
-  const activas = lista.filter((p) => p.activo !== false).map((p) => ({ ...p, minutos: duracionMin(p) }));
-  const principales = activas.filter((p) => p.grupo !== 'otras');
-  const otras = activas.filter((p) => p.grupo === 'otras');
-  return otras.length
-    ? [...principales, { id: 'otra', texto: 'Otras', icono: 'ellipsis-horizontal-circle', opciones: otras }]
-    : principales;
+// Lista de descansos (de la web o del servidor) → tarjetas de la app (solo los activos, con sus minutos)
+export function armarDescansos(lista = []) {
+  return lista.filter((p) => p.activo !== false).map((p) => ({ ...p, minutos: duracionMin(p) }));
 }
 
-export const TIPOS_PAUSA = armarTiposPausa(PAUSAS_EJEMPLO);
+export const TIPOS_PAUSA = armarDescansos(DESCANSOS_EJEMPLO);
 
 // 30 → "30 min" · 60 → "1 h" · 90 → "1 h 30 min" · 300 → "5 h"
 export function textoDuracion(min) {
+  min = Math.round(min);
   if (min < 60) return `${min} min`;
   const h = Math.floor(min / 60);
   const m = min % 60;

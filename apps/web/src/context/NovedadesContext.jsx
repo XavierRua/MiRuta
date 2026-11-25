@@ -20,10 +20,11 @@ const escribir = (clave, valor) => {
 // Configuración de formularios, GPS apagados manualmente y horas de reporte excluidas.
 // En la demo se guarda en el navegador; con Supabase, en las tablas de la migración 0014.
 export function NovedadesProvider({ children }) {
-  const [formularios, setFormularios] = useState(() => {
-    const f = { ...FORMULARIOS_DEFECTO, ...leer('miruta.formularios', {}) };
-    return { ...f, tiposPausa: normalizarPausas(f.tiposPausa) };
-  });
+  const [formularios, setFormularios] = useState(() =>
+    normalizarPausas({ ...FORMULARIOS_DEFECTO, ...normalizarPausas(leer('miruta.formularios', {})) }),
+  );
+  // Actividades autorizadas: habilitadas a un trabajador para una fecha (capacitación, reunión, cita médica…)
+  const [actividades, setActividades] = useState(() => leer('miruta.actividades', null) ?? actividadesEjemplo());
   const [apagados, setApagados] = useState(() => leer('miruta.apagados', []));
   const [exclusiones, setExclusiones] = useState(() => leer('miruta.exclusiones', []));
 
@@ -45,6 +46,24 @@ export function NovedadesProvider({ children }) {
     setExclusiones(nuevas);
     escribir('miruta.exclusiones', nuevas);
   };
+  // Habilitar una actividad (queda quién la autorizó) y cancelarla. Con Supabase: tabla actividades_autorizadas
+  // (0016); al insertarla, el servidor envía la notificación con sonido al trabajador.
+  const guardarActividades = (lista) => {
+    setActividades(lista);
+    escribir('miruta.actividades', lista);
+  };
+  const autorizarActividad = (a) =>
+    guardarActividades([
+      { id: `aut-${Date.now()}-${a.trabajadorId}`, creadaEn: new Date().toISOString(), estado: 'habilitada', ...a },
+      ...actividades,
+    ]);
+  const cancelarActividad = (id, por) =>
+    guardarActividades(
+      actividades.map((a) =>
+        a.id === id ? { ...a, estado: 'cancelada', canceladaPor: por, canceladaEn: new Date().toISOString() } : a,
+      ),
+    );
+
   const quitarExclusion = (id) => {
     const nuevas = exclusiones.filter((e) => e.id !== id);
     setExclusiones(nuevas);
@@ -62,6 +81,9 @@ export function NovedadesProvider({ children }) {
         exclusiones,
         guardarExclusion,
         quitarExclusion,
+        actividades,
+        autorizarActividad,
+        cancelarActividad,
       }}
     >
       {children}
@@ -71,4 +93,41 @@ export function NovedadesProvider({ children }) {
 
 export function useNovedades() {
   return useContext(NovedadesContext);
+}
+
+// Ejemplos para la demo: dos actividades habilitadas hoy para Carlos (las mismas que ve la app)
+function actividadesEjemplo() {
+  const hoy = new Date();
+  const fecha = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+  const creadaEn = new Date(hoy.setHours(7, 10, 0, 0)).toISOString();
+  return [
+    {
+      id: 'aut-demo-1',
+      trabajadorId: 't1',
+      fecha,
+      tipo: 'capacitacion',
+      texto: 'Capacitación',
+      icono: 'school',
+      modo: 'asignado',
+      minutos: 60,
+      nota: 'Trabajo seguro en alturas',
+      autorizadaPor: 'Laura Gómez (SST)',
+      creadaEn,
+      estado: 'habilitada',
+    },
+    {
+      id: 'aut-demo-2',
+      trabajadorId: 't1',
+      fecha,
+      tipo: 'reunion',
+      texto: 'Reunión',
+      icono: 'people',
+      modo: 'libre',
+      minutos: null,
+      nota: 'Reunión de seguridad con el cliente',
+      autorizadaPor: 'Jorge Pérez (Supervisor)',
+      creadaEn,
+      estado: 'habilitada',
+    },
+  ];
 }

@@ -100,7 +100,7 @@ Inicio de jornada OBLIGATORIO (no ve tareas ni visitas hasta terminarlo)
 Pestaña Jornada
    · Reporte de actividad CADA HORA (solo dentro de su hora; si no ──► "No reportó")
    · Visitas del día: llegada/salida automáticas por geocerca
-   · Pausas (se cierran solas con alarma) · Incidentes · Horas extras
+   · Pausas y actividades autorizadas (extienden la ventana del reporte) · Incidentes · Horas extras
    · Indicadores: visitas, eficiencia, velocidad, a pie / vehículo / quieto
        │
        ▼
@@ -152,7 +152,8 @@ Fin del horario + 1 hora ──► se cierra el último reporte ──► "Jorna
   - entradas y salidas automáticas por geocerca y alerta si sale del área de su única visita.
 - **Horas extras**: iniciar y finalizar con la hora del servidor, solo después de la jornada.
 - **Incidentes laborales**: descripción, fotos opcionales y si puede continuar; fecha, hora y GPS automáticos.
-- **Pausas y descansos**: desayuno, almuerzo, pausa activa y otras (capacitación, reunión, cita médica…).
+- **Pausas de descanso**: desayuno y almuerzo (una vez por jornada) y pausa activa (bolsa de minutos del día que reparte como quiera), con los tiempos que configura la web; se cierran solas con alarma. Mientras duran, el reporte se desactiva y su ventana se **extiende** por los minutos de pausa ("Ventana 8:00 extendida hasta las 9:15 por desayuno"); si una pausa cubre toda la hora queda "En pausa" y no cuenta en la eficiencia.
+- **Actividades autorizadas** (capacitación, reunión, cita médica, diligencia…): solo aparecen cuando las habilitan en la web para ese día, con tiempo libre (cronómetro) o asignado (alarma y cierre automático).
   - Se cierran solas al cumplir el tiempo, con alarma.
   - Recordatorio de pausa activa cada 2 h.
   - Las configura la web.
@@ -179,7 +180,8 @@ Fin del horario + 1 hora ──► se cierra el último reporte ──► "Jorna
 | **Reportes de actividad** | Reportes con fotos, selfie y GPS; filtro por estado. **Excluir horas** (capacitaciones). |
 | **Desempeño** | Comparativo de trabajadores y registro de excesos de velocidad. |
 | **Horas extras** | Totales por día, semana, mes o rango y por sesión. |
-| **Novedades y ausentismo** | Pestañas Estado de salud, Preoperacional, Pausas, Incidentes, GPS apagados, **Notificaciones** (leídas o no y cuándo) y **Ausentismo**, con KPIs y descarga en Excel o PDF. Cada pestaña es un permiso. |
+| **Actividades autorizadas** | Habilitar capacitación, reunión, cita médica, etc. a uno o varios trabajadores para una fecha, con tiempo libre o asignado; queda quién la autorizó y se puede cancelar. |
+| **Novedades y ausentismo** | Pestañas Estado de salud, Preoperacional, **Pausas y actividades** (con resumen por trabajador: descanso total y quién excede el almuerzo), Incidentes, GPS apagados, **Notificaciones** (leídas o no y cuándo) y **Ausentismo**, con KPIs y descarga en Excel o PDF. Cada pestaña es un permiso. |
 | **Alertas** | Salud no apto, falla en preoperacional, incidente, salida del área, no reportó, documentos, GPS apagado, etc. |
 | **Horarios** | Horario por empresa, grupo o trabajador. |
 | **Configuración** | Logo de la empresa, velocidad, eficiencia, geocercas, formularios de salud y preoperacional, **pausas** (nombre, ícono, grupo, duración en min u horas, activa) y quién más puede configurarlas. Cada sección depende de un permiso. |
@@ -198,7 +200,7 @@ MiRuta/
 │   └── definicion.md        Definición del proyecto: decisiones, reglas de negocio de cada función,
 │                            cálculo de almacenamiento y pendientes
 ├── supabase/
-│   └── migrations/          Base de datos en SQL, en orden (0001 → 0015). Ver sección 6
+│   └── migrations/          Base de datos en SQL, en orden (0001 → 0016). Ver sección 6
 └── apps/
     ├── mobile/              App del trabajador (Expo)
     └── web/                 Panel web (React + Vite)
@@ -257,7 +259,7 @@ MiRuta/
 | `TarjetaVisitas` | Visitas de hoy con su estado. |
 | `TarjetaHorasExtra` | Iniciar y finalizar horas extras. |
 | `TarjetaIncidentes` | Botón para reportar incidentes y lista del día. |
-| `TarjetaPausas` | Cuadrícula de pausas para iniciar con un toque. |
+| `TarjetaPausas` | Pausas de descanso y actividades autorizadas de hoy, para iniciar con un toque. |
 | `FormularioSalud` / `FormularioPreoperacional` | Formularios del inicio (y fin) de jornada. |
 | `MapaVisita` / `GeocercaEnMapa` / `MarcadorModo` / `LeyendaDesplazamiento` | Mapa de la visita, dibujo de la geocerca, ícono del trabajador (a pie, moto, carro) y leyenda de colores. |
 | `ComoLlegar` | Abre Google Maps o Waze. |
@@ -304,7 +306,7 @@ MiRuta/
 | `constants/` | Textos fijos: autorización de datos y pasos de permisos del celular. |
 | `data/` | Datos de ejemplo (`mock.js`: trabajador, empresa, vehículos, horario, jornadas; `programacion.js`: visitas). |
 | `hooks/` | Lógica reutilizable: `useFranjasHoy` (horas de reporte de hoy y su estado), `useJornada`, `useMiUbicacion`, `useVelocidad`. |
-| `utils/` | Cálculos puros: franjas de reportes, eficiencia, velocidad, visitas y geocercas, desplazamiento, documentos, horas extras, fechas, hora de Colombia y formatos. |
+| `utils/` | Cálculos puros: franjas de reportes, extensión por pausas (`pausas.js`), eficiencia, velocidad, visitas y geocercas, desplazamiento, documentos, horas extras, fechas, hora de Colombia y formatos. |
 | `theme/colors.js` | Paleta de colores de la app. |
 
 ### 4.2 Panel web — `apps/web`
@@ -407,6 +409,7 @@ Las migraciones se ejecutan **en orden** en el SQL Editor de Supabase (o con `su
 | `0013_desplazamiento` | A pie, en vehículo o quieto: km y tiempos por jornada y por geocerca. |
 | `0014_inicio_jornada_pausas_incidentes` | Salud y preoperacional configurables, pico y placa, pausas, incidentes, apagado del GPS, horas excluidas, ausentismo y alertas con sonido. |
 | `0015_notificaciones_logo_empresa` | Constancia de entrega y lectura de cada notificación y logo de la empresa (bucket `logos`). |
+| `0016_pausas_actividades_extension_reportes` | Tiempos de pausa por empresa (veces por jornada y bolsa de pausa activa), actividades autorizadas por trabajador y fecha, extensión de la ventana de reporte por pausas, "En pausa" fuera de la eficiencia e informe de pausas. |
 
 Funciones importantes que viven en el servidor:
 - `celular_valido()`: solo el celular vinculado puede enviar datos.
@@ -438,7 +441,8 @@ if (puede('web.gps.apagar')) { … }
 |---|:-:|:-:|:-:|
 | `web.configuracion.general` (velocidad, eficiencia, geocercas) | ✅ | | |
 | `web.formularios.configurar` (salud y preoperacional) | ✅ | | |
-| `web.pausas.configurar` | ✅ | | ✅ |
+| `web.pausas.configurar` (tiempos de las pausas) | ✅ | | ✅ |
+| `web.actividades.autorizar` | ✅ | ✅ | ✅ |
 | `web.empresa.logo` | ✅ | | |
 | `web.salud.verRespuestas` (dato sensible) | ✅ | ✅ | ✅ |
 | `web.preoperacional.ver` · `web.pausas.ver` · `web.incidentes.ver` | ✅ | ✅ | ✅ |
@@ -564,7 +568,7 @@ npm run build      # genera la carpeta dist/ lista para Cloudflare Pages
 
 ## 13. Pendientes y hoja de ruta
 
-- [ ] **Conectar Supabase:** cambiar `services/api.js` en la app y en la web, aplicar las migraciones 0001 → 0015 y crear las tareas de `pg_cron`.
+- [ ] **Conectar Supabase:** cambiar `services/api.js` en la app y en la web, aplicar las migraciones 0001 → 0016 y crear las tareas de `pg_cron`.
 - [ ] **Rastreo GPS en segundo plano** por horario y cola sin señal (`services/rastreo.js`). Necesita un *development build*: no funciona en Expo Go.
 - [ ] **Perfiles de la web** (Superadministrador, Administrador de empresa, Jefe de servicio técnico, SST) con inicio de sesión real, y pantalla para encender o apagar todos los permisos por rol.
 - [ ] Alerta **con sonido** en la web mediante Realtime.

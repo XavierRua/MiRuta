@@ -67,6 +67,17 @@ export function franjaParaEnviar(franjas, reportes, modoDemo, ahora, hayHorarioH
   return reportes.some((r) => r.franjaId === demo.id) ? null : demo;
 }
 
+// Todas las ventanas que se pueden enviar ahora, la que cierra primero arriba.
+// Con una pausa puede haber dos abiertas a la vez: la anterior (extendida) y la de la hora actual.
+export function franjasParaEnviar(franjas, reportes, modoDemo, ahora, hayHorarioHoy = true) {
+  const abiertas = franjas
+    .filter((f) => dentroDeLaFranja(f, ahora) && !reportes.some((r) => r.franjaId === f.id))
+    .sort((a, b) => cierreDe(a) - cierreDe(b));
+  if (abiertas.length) return abiertas;
+  const demo = franjaParaEnviar([], reportes, modoDemo, ahora, hayHorarioHoy);
+  return demo ? [demo] : [];
+}
+
 // Minutos que faltan para que cierre la franja
 export function minutosRestantes(franja, ahora) {
   return Math.max(0, Math.ceil((cierreDe(franja).getTime() - ahora.getTime()) / MIN));
