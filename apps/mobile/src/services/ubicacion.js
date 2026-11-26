@@ -25,3 +25,20 @@ export async function obtenerUbicacion() {
   }
   return ubicacion;
 }
+
+// Ubicación rápida para el registro de ingresos: sin pedir permiso (si no lo hay, no se guarda), con la última
+// conocida o una de precisión media, y sin buscar la dirección (no hace esperar al trabajador)
+export async function obtenerUbicacionRapida() {
+  const { granted } = await Location.getForegroundPermissionsAsync();
+  if (!granted) return null;
+  const pos =
+    (await Location.getLastKnownPositionAsync({ maxAge: 5 * 60000 })) ??
+    (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+  if (!pos) return null;
+  return {
+    lat: pos.coords.latitude,
+    lng: pos.coords.longitude,
+    precisionM: Math.round(pos.coords.accuracy ?? 0),
+    simulada: !!pos.mocked,
+  };
+}

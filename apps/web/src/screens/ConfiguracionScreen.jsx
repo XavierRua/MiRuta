@@ -27,6 +27,9 @@ export default function ConfiguracionScreen() {
       'El mínimo del naranja debe ser mayor que 0 y menor que el del verde.',
     !(form.toleranciaSalidaMin >= 1 && form.toleranciaSalidaMin <= 15) &&
       'La tolerancia de salida debe estar entre 1 y 15 minutos.',
+    !(form.toleranciaLlegadaMin >= 0 && form.toleranciaLlegadaMin <= 60) &&
+      'La tolerancia de llegada debe estar entre 0 y 60 minutos.',
+    !(form.bateriaBajaPct >= 5 && form.bateriaBajaPct <= 50) && 'El nivel de batería baja debe estar entre 5 y 50 %.',
   ].filter(Boolean);
 
   const guardar = () => {
@@ -126,6 +129,39 @@ export default function ConfiguracionScreen() {
                 GPS y no se registra la salida ni se envía alerta. La hora de salida que queda registrada es la del
                 momento en que salió. La geocerca de cada visita (radio de la obra o área de la zona) se configura en
                 Programación.
+              </small>
+            </label>
+          </section>
+
+          <section className="panel">
+            <h2>Ingresos a la app y batería</h2>
+            <label className="campo-config">
+              <span>Tolerancia de llegada</span>
+              <div className="con-unidad">
+                <input
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={form.toleranciaLlegadaMin}
+                  onChange={num('toleranciaLlegadaMin')}
+                />
+                <em>min</em>
+              </div>
+              <small>
+                Si el primer ingreso del día a la app es más de {form.toleranciaLlegadaMin || 0} min después del inicio
+                del horario, queda como llegada tarde y se crea una alerta.
+              </small>
+            </label>
+            <label className="campo-config">
+              <span>Aviso de batería baja</span>
+              <div className="con-unidad">
+                <input type="number" min={5} max={50} value={form.bateriaBajaPct} onChange={num('bateriaBajaPct')} />
+                <em>%</em>
+              </div>
+              <small>
+                Durante el horario, si la batería baja de este nivel y el celular no está cargando, se le avisa al
+                trabajador una vez al día y queda registrado (con alerta). La batería también queda en cada ingreso, en
+                cada reporte y al iniciar la jornada.
               </small>
             </label>
           </section>

@@ -22,6 +22,7 @@ import { formatoDiaCorto, hoy, rangoDia, rangoMes, rangoSemana, validarRango } f
 import FiltroHistorial, { FILTROS } from '../components/FiltroHistorial';
 import { usePermisos } from '../context/PermisosContext';
 import { useDesplazamiento } from '../context/DesplazamientoContext';
+import { useIngresos } from '../context/IngresosContext';
 import { useJornadaDia } from '../context/JornadaDiaContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { infoModo, kmTexto, textoMin } from '../utils/desplazamiento';
@@ -39,6 +40,28 @@ export default function HistorialScreen({ navigation }) {
   const { puede } = usePermisos();
   const { dia: desplazamientoHoy, tipoVehiculo } = useDesplazamiento();
   const { dia: registrosHoy } = useJornadaDia();
+  // Ingresos de hoy (con batería) e inicio de jornada: respaldo ante "se me descargó el celular"
+  const { ingresos } = useIngresos();
+  const hoyTexto = new Date().toDateString();
+  const ingresosHoy = ingresos.filter((x) => new Date(x.hora).toDateString() === hoyTexto);
+  const resumenIngresosHoy = (() => {
+    const ok = ingresosHoy.filter((x) => x.tipo === 'ingreso').sort((a, b) => new Date(a.hora) - new Date(b.hora));
+    if (!ok.length && !ingresosHoy.length) return null;
+    const primero = ok[0];
+    const ultimo = ok[ok.length - 1];
+    const bajo = ingresosHoy.find((x) => x.tipo === 'bateria_baja');
+    return {
+      primero: primero && hhmm(new Date(primero.hora)),
+      bateriaPrimero: primero?.bateria?.pct ?? null,
+      ultimo: ultimo && hhmm(new Date(ultimo.hora)),
+      cantidad: ok.length,
+      pinIncorrectos: ingresosHoy.filter((x) => x.tipo === 'pin_incorrecto').length,
+      minutosTarde: primero?.minutosTarde ?? null,
+      bateriaInicio: registrosHoy.inicioJornada?.bateria?.pct ?? null,
+      horaInicio: registrosHoy.inicioJornada ? hhmm(new Date(registrosHoy.inicioJornada.hora)) : null,
+      bateriaBaja: bajo ? `${hhmm(new Date(bajo.hora))} (${bajo.bateria?.pct ?? '—'} %)` : null,
+    };
+  })();
   const pausasHoy = registrosHoy.pausas
     .filter((p) => p.fin)
     .map((p) => ({
@@ -103,6 +126,7 @@ export default function HistorialScreen({ navigation }) {
                   visitas: visitasDeHoy,
                   desplazamiento: desplazamientoHoy.totales,
                   pausas: pausasHoy,
+                  ingresos: resumenIngresosHoy ?? j.ingresos,
                 }
               : {
                   ...j,
@@ -121,6 +145,8 @@ export default function HistorialScreen({ navigation }) {
       firmaVisitas,
       desplazamientoHoy,
       pausasHoy.length,
+      ingresosHoy.length,
+      registrosHoy.inicioJornada?.hora,
     ],
   );
   const enviadosPeriodo = jornadas.reduce((s, j) => s + j.reportesEnviados, 0);
@@ -309,6 +335,41 @@ export default function HistorialScreen({ navigation }) {
                     })}
                   </View>
                 )}
+                {/* Ingresos a la app y batería del día (control de llegada y respaldo ante reclamos) */}
+                {puede('historial.ingresos') && j.ingresos && (
+                  <View style={s.ingresos}>
+                    <Text style={s.ingresosTitulo}>
+                      <Ionicons name="log-in-outline" size={13} color={color.azul} /> Ingresos y batería
+                    </Text>
+                    {j.ingresos.primero && (
+                      <Text style={s.velTexto}>
+                        Primer ingreso <Text style={s.velValor}>{j.ingresos.primero}</Text>
+                        {j.ingresos.bateriaPrimero != null ? ` · 🔋 ${j.ingresos.bateriaPrimero} %` : ''}
+                        {j.ingresos.minutosTarde ? (
+                          <Text style={{ color: color.rojo, fontWeight: '700' }}>
+                            {' '}
+                            · {textoDuracion(j.ingresos.minutosTarde)} tarde
+                          </Text>
+                        ) : null}
+                      </Text>
+                    )}
+                    {j.ingresos.bateriaInicio != null && (
+                      <Text style={s.velTexto}>
+                        Hora de ingreso a la aplicación {j.ingresos.horaInicio ?? ''} · 🔋 {j.ingresos.bateriaInicio} %
+                      </Text>
+                    )}
+                    <Text style={s.velTexto}>
+                      {j.ingresos.cantidad} {j.ingresos.cantidad === 1 ? 'ingreso' : 'ingresos'}
+                      {j.ingresos.ultimo && j.ingresos.cantidad > 1 ? ` · último ${j.ingresos.ultimo}` : ''}
+                      {j.ingresos.pinIncorrectos ? ` · ${j.ingresos.pinIncorrectos} PIN incorrecto` : ''}
+                    </Text>
+                    {j.ingresos.bateriaBaja && (
+                      <Text style={[s.velTexto, { color: color.ambar }]}>
+                        Aviso de batería baja: {j.ingresos.bateriaBaja}
+                      </Text>
+                    )}
+                  </View>
+                )}
                 {/* Registro de pausas y actividades autorizadas (aparte de los reportes) */}
                 {puede('pausas.usar') && j.pausas?.length > 0 && (
                   <View style={s.pausas}>
@@ -477,6 +538,8 @@ function Etiqueta({ lugar }) {
 }
 
 const s = StyleSheet.create({
+  ingresos: { gap: 3, backgroundColor: color.azulSuave, borderRadius: 10, padding: 10 },
+  ingresosTitulo: { color: color.azul, fontWeight: '700', fontSize: 12, marginBottom: 2 },
   pausas: { gap: 3, backgroundColor: color.moradoSuave, borderRadius: 10, padding: 10 },
   pausasTitulo: { color: color.morado, fontWeight: '700', fontSize: 12, marginBottom: 2 },
   desplazamiento: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },

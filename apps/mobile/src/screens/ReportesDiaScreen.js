@@ -9,6 +9,7 @@ import { franjasDeSesion } from '../utils/horasExtra';
 import { api } from '../services/api';
 import { formatoDiaCorto } from '../utils/fechas';
 import { hhmm } from '../utils/reportes';
+import { textoBateria } from '../services/bateria';
 import { nivelEficiencia, porcentaje } from '../utils/eficiencia';
 
 // Reportes de actividad de un día (se abre desde Historial o desde Jornada)
@@ -102,6 +103,7 @@ export default function ReportesDiaScreen({ route }) {
                 </Text>
                 <Text style={s.hora}>
                   Enviado a las {hhmm(r.enviadoEn)}
+                  {r.bateria ? ` · ${textoBateria(r.bateria)}` : ''}
                   {r.extensionTexto ? ` · ${r.extensionTexto}` : ''}
                 </Text>
               </View>

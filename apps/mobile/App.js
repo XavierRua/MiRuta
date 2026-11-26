@@ -11,6 +11,7 @@ import { VisitasProvider } from './src/context/VisitasContext';
 import { DesplazamientoProvider } from './src/context/DesplazamientoContext';
 import { JornadaDiaProvider } from './src/context/JornadaDiaContext';
 import { NotificacionesProvider } from './src/context/NotificacionesContext';
+import { IngresosProvider } from './src/context/IngresosContext';
 import AppNavigator from './src/navigation/AppNavigator';
 
 export default function App() {
@@ -28,10 +29,12 @@ export default function App() {
                     <DesplazamientoProvider>
                       <VisitasProvider>
                         <NotificacionesProvider>
-                          <NavigationContainer>
-                            <StatusBar style="dark" />
-                            <AppNavigator />
-                          </NavigationContainer>
+                          <IngresosProvider>
+                            <NavigationContainer>
+                              <StatusBar style="dark" />
+                              <AppNavigator />
+                            </NavigationContainer>
+                          </IngresosProvider>
                         </NotificacionesProvider>
                       </VisitasProvider>
                     </DesplazamientoProvider>

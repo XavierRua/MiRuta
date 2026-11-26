@@ -10,6 +10,7 @@ import {
   programarPausasActivas,
 } from '../services/notificaciones';
 import { duracionMin, textoDuracion } from '../config/formularios';
+import { leerBateria } from '../services/bateria';
 import { enColombia } from '../utils/horaColombia';
 import { usePermisos } from './PermisosContext';
 
@@ -28,6 +29,7 @@ const vacio = (fecha) => ({
   actividadesAvisadas: [], // actividades autorizadas que ya se le notificaron
   incidentes: [], // [{ id, descripcion, fotos, puedeContinuar, hora, ubicacion }]
   gpsApagado: null, // { por, rol, hora, motivo }
+  inicioJornada: null, // { hora, bateria }: batería con la que empezó la jornada
 });
 
 // Registros del día del trabajador: salud (inicio y fin), preoperacional, pausas, incidentes y
@@ -79,6 +81,7 @@ export function JornadaDiaProvider({ children }) {
   const guardarSalud = async (momento, respuestas, preguntas) => {
     const alertas = preguntas.filter((p) => p.alertaSi && respuestas[p.id] === p.alertaSi).map((p) => p.texto);
     const registro = {
+      bateria: await leerBateria(),
       respuestas,
       noApto: respuestas.apto === 'No',
       alerta: alertas.length > 0,
@@ -91,7 +94,7 @@ export function JornadaDiaProvider({ children }) {
   };
 
   const guardarPreoperacional = async (registro) => {
-    const r = { ...registro, hora: ahoraServidor().toISOString() };
+    const r = { ...registro, hora: ahoraServidor().toISOString(), bateria: await leerBateria() };
     await api.enviarFormulario('preoperacional', r);
     actualizar({ preoperacional: r });
     return r;
@@ -242,6 +245,26 @@ export function JornadaDiaProvider({ children }) {
           { tipo: 'actividad', actividad: a.id },
         ).catch(() => {});
       }
+    };
+    revisar();
+    const id = setInterval(revisar, 60000);
+    return () => clearInterval(id);
+  }, [cargado]);
+
+  // ---------- Batería al iniciar la jornada ----------
+  // La primera vez que la app está abierta desde la hora de inicio del horario se guarda la batería.
+  // (Con el rastreo en segundo plano se tomará en el momento exacto en que arranca el GPS.)
+  useEffect(() => {
+    if (!cargado || !horarioHoy) return;
+    const revisar = () => {
+      const ahora = ahoraServidor();
+      if (diaRef.current.inicioJornada || ahora < enColombia(ahora, horarioHoy.inicio)) return;
+      leerBateria().then((bateria) => {
+        if (diaRef.current.inicioJornada) return;
+        const registro = { hora: ahora.toISOString(), bateria };
+        actualizar({ inicioJornada: registro });
+        api.enviarFormulario('inicio_jornada', registro).catch(() => {});
+      });
     };
     revisar();
     const id = setInterval(revisar, 60000);

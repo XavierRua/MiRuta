@@ -107,6 +107,18 @@ function generarJornadas() {
             }
           : null,
       km: Math.round((sabado ? 18 : 45) * 10 + (semilla % 30) * 10) / 10,
+      // Ingresos a la app y batería (control de llegada y respaldo ante reclamos)
+      ingresos: {
+        primero: semilla % 10 === 0 ? '7:24' : semilla % 23 === 0 ? '8:25' : `6:${50 + (semilla % 9)}`,
+        bateriaPrimero: 70 + (semilla % 29),
+        minutosTarde: semilla % 10 === 0 ? 24 : semilla % 23 === 0 ? 85 : null, // más de 10 min después de las 7:00
+        horaInicio: '7:00',
+        bateriaInicio: 72 + (semilla % 27),
+        ultimo: sabado ? '11:40' : `16:${10 + (semilla % 40)}`,
+        cantidad: 2 + (semilla % 4),
+        pinIncorrectos: semilla % 13 === 0 ? 1 : 0,
+        bateriaBaja: !sabado && semilla % 8 === 0 ? `15:${10 + (semilla % 40)} (18 %)` : null,
+      },
       // Pausas de descanso y actividades autorizadas del día (registro aparte de los reportes)
       pausas: sabado
         ? [{ clase: 'descanso', texto: 'Desayuno', inicio: '9:05', fin: '9:20', minutos: 15 }]
@@ -223,6 +235,7 @@ export function reportesDeEjemplo(jornada) {
       enviadoEn: new Date(inicio.getTime() + (desayuno ? 70 : 20 + ((k * 7) % 35)) * 60 * 1000),
       estado: 'a_tiempo',
       ...(desayuno ? { extensionMin: 15, extensionTexto: 'Extendido +15 min por desayuno' } : {}),
+      bateria: { pct: Math.max(8, 95 - k * 7 - (jornada.fecha.getDate() % 5)), cargando: false },
       descripcion: tareas[(k + jornada.fecha.getDate()) % tareas.length],
       lugar: lugar.nombre,
       ubicacion: { lat: 6.25 + k * 0.002, lng: -75.57 + k * 0.002, precisionM: 8, direccion: null, simulada: false },

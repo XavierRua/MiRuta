@@ -16,7 +16,17 @@ export function generarNovedades(trabajadores, desde, hasta, apagadosManuales = 
     const d = descansos.find((x) => x.id === id && x.activo !== false);
     return d && { texto: d.texto, min: d.unidad === 'h' ? Math.round(d.duracion * 60) : d.duracion, bolsa: d.bolsaMin };
   };
-  const r = { salud: [], preoperacional: [], pausas: [], incidentes: [], apagados: [], notificaciones: [] };
+  const r = {
+    salud: [],
+    preoperacional: [],
+    pausas: [],
+    incidentes: [],
+    apagados: [],
+    notificaciones: [],
+    ingresos: [],
+  };
+  const tolerancia = config.toleranciaLlegadaMin ?? 10;
+  const umbralBateria = config.bateriaBajaPct ?? 20;
   const hoyTexto = aTextoFecha(new Date());
   for (let d = new Date(desde); d <= hasta; d.setDate(d.getDate() + 1)) {
     if (d.getDay() === 0) continue;
@@ -29,6 +39,38 @@ export function generarNovedades(trabajadores, desde, hasta, apagadosManuales = 
       const s = semilla(`${t.id}${f}`);
       const persona = `${t.nombres} ${t.apellidos}`;
       const base = { fecha, trabajadorId: t.id, persona };
+
+      // Ingresos a la app con PIN (con batería y ubicación) y avisos de batería baja
+      {
+        const ahoraMin = new Date().getHours() * 60 + new Date().getMinutes();
+        const tardeDemo = s % 10 === 0 ? 24 : s % 17 === 0 ? 12 : s % 29 === 0 ? 85 : 0; // minutos después de las 7:00
+        const primero = tardeDemo ? 7 * 60 + tardeDemo : 6 * 60 + 48 + (s % 11);
+        const bat0 = 68 + (s % 31);
+        const ubic = `${(t.lat + (s % 5) * 0.0004).toFixed(5)}, ${(t.lng - (s % 3) * 0.0004).toFixed(5)}`;
+        const ev = (min, evento, bateria, extra = {}) =>
+          (!esHoy || min <= ahoraMin) &&
+          r.ingresos.push({
+            ...base,
+            minutos: min,
+            hora: hm(min),
+            evento,
+            bateria,
+            cargando: false,
+            ubicacion: ubic,
+            ...extra,
+          });
+        if (s % 13 === 0) ev(primero - 1, 'PIN incorrecto', bat0);
+        ev(primero, 'Ingreso', bat0, {
+          primero: true,
+          minutosTarde: primero - 7 * 60 > tolerancia ? primero - 7 * 60 : null,
+        });
+        const otros = 1 + (s % 3);
+        for (let k = 1; k <= otros; k++) {
+          const min = primero + k * (sabado ? 70 : 150) + (s % 20);
+          ev(min, 'Ingreso', Math.max(5, bat0 - k * (12 + (s % 6))), { cargando: k === otros && s % 4 === 0 });
+        }
+        if (!sabado && s % 8 === 0) ev(15 * 60 + (s % 40), 'Batería baja', Math.max(5, umbralBateria - 2 - (s % 5)));
+      }
 
       // Salud al iniciar (y al terminar, salvo hoy)
       const noApto = s % 100 < 4;
@@ -323,4 +365,45 @@ export function resumenPausas(n) {
       actividadesH: Math.round((r.actividadesMin / 60) * 10) / 10,
     }))
     .sort((a, b) => b.excesoAlmuerzo - a.excesoAlmuerzo || a.persona.localeCompare(b.persona));
+}
+
+// Resumen de ingresos por trabajador: primer ingreso promedio, llegadas tarde, PIN incorrectos y batería
+export function resumenIngresos(n) {
+  const m = new Map();
+  for (const x of n.ingresos) {
+    const r = m.get(x.persona) ?? {
+      persona: x.persona,
+      dias: 0,
+      sumaPrimero: 0,
+      tardes: 0,
+      minutosTarde: 0,
+      pin: 0,
+      sumaBat: 0,
+      bajas: 0,
+    };
+    if (x.primero) {
+      r.dias += 1;
+      r.sumaPrimero += x.minutos;
+      r.sumaBat += x.bateria ?? 0;
+      if (x.minutosTarde) {
+        r.tardes += 1;
+        r.minutosTarde += x.minutosTarde;
+      }
+    }
+    if (x.evento === 'PIN incorrecto') r.pin += 1;
+    if (x.evento === 'Batería baja') r.bajas += 1;
+    m.set(x.persona, r);
+  }
+  return [...m.values()]
+    .map((r) => ({
+      persona: r.persona,
+      dias: r.dias,
+      primeroPromedio: r.dias ? hm(Math.round(r.sumaPrimero / r.dias)) : '—',
+      tardes: r.tardes,
+      minutosTarde: r.minutosTarde,
+      pin: r.pin,
+      bateriaPromedio: r.dias ? Math.round(r.sumaBat / r.dias) : null,
+      bajas: r.bajas,
+    }))
+    .sort((a, b) => b.tardes - a.tardes || a.persona.localeCompare(b.persona));
 }

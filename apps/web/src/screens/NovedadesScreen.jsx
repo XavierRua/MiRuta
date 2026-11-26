@@ -1,3 +1,4 @@
+import { textoDuracion } from '../config/formularios';
 import { useMemo, useState } from 'react';
 import { FiDownload, FiFileText } from 'react-icons/fi';
 import FiltroPeriodo, { periodoInicial } from '../components/FiltroPeriodo';
@@ -6,7 +7,8 @@ import { useEmpresa } from '../hooks/useEmpresa';
 import { api } from '../services/api';
 import { descargarExcel, descargarPdf } from '../utils/exportar';
 import { deTextoFecha, validarRango } from '../utils/fechas';
-import { ausentismo, generarNovedades, resumenPausas } from '../utils/novedades';
+import { ausentismo, generarNovedades, resumenIngresos, resumenPausas } from '../utils/novedades';
+import { useConfig } from '../context/ConfigContext';
 import { fechaCorta } from '../utils/filtrosHistorial';
 import { usePermisos } from '../context/PermisosContext';
 
@@ -18,6 +20,7 @@ const PESTANAS = [
   { id: 'incidentes', texto: 'Incidentes', permiso: 'web.incidentes.ver' },
   { id: 'apagados', texto: 'GPS apagados', permiso: 'web.ausentismo.ver' },
   { id: 'notificaciones', texto: 'Notificaciones', permiso: 'web.notificaciones.ver' },
+  { id: 'ingresos', texto: 'Ingresos y batería', permiso: 'web.ingresos.ver' },
   { id: 'ausentismo', texto: 'Ausentismo', permiso: 'web.ausentismo.ver' },
 ];
 
@@ -97,6 +100,39 @@ const COLUMNAS = {
     ],
     ['Tardó en leerla', (x) => (x.minutosParaLeer != null ? `${x.minutosParaLeer} min` : '—')],
   ],
+  // Ingresos a la app con PIN: control de llegada y respaldo ante "se me descargó el celular"
+  ingresos: [
+    ['Fecha', (x) => fechaCorta(x.fecha)],
+    ['Trabajador', (x) => x.persona],
+    ['Hora', (x) => x.hora],
+    [
+      'Evento',
+      (x) => (x.primero ? 'Primer ingreso del día' : x.evento),
+      (x) => (
+        <span className={`chip ${x.evento === 'Ingreso' ? (x.primero ? 'ok' : 'muted') : 'warn'}`}>
+          {x.primero ? 'Primer ingreso del día' : x.evento}
+        </span>
+      ),
+    ],
+    [
+      'Batería',
+      (x) => (x.bateria != null ? `${x.bateria} %${x.cargando ? ' (cargando)' : ''}` : '—'),
+      (x) =>
+        x.bateria != null ? (
+          <span className={x.bateria < 20 && !x.cargando ? 'texto-danger' : ''}>
+            {x.cargando ? '🔌' : '🔋'} {x.bateria} %
+          </span>
+        ) : (
+          '—'
+        ),
+    ],
+    [
+      'Llegada tarde',
+      (x) => (x.minutosTarde ? textoDuracion(x.minutosTarde) : ''),
+      (x) => (x.minutosTarde ? <strong className="texto-danger">{textoDuracion(x.minutosTarde)} tarde</strong> : '—'),
+    ],
+    ['Ubicación', (x) => x.ubicacion],
+  ],
   ausentismo: [
     ['Fecha', (x) => fechaCorta(x.fecha)],
     ['Trabajador', (x) => x.persona],
@@ -111,6 +147,7 @@ const COLUMNAS = {
 export default function NovedadesScreen() {
   const { empresaId, trabajadores } = useEmpresa();
   const { apagados, formularios, actividades } = useNovedades();
+  const { indicadores } = useConfig();
   const { puede } = usePermisos();
   const visibles = PESTANAS.filter((p) => puede(p.permiso));
   const [elegida, setPestana] = useState('salud');
@@ -128,9 +165,25 @@ export default function NovedadesScreen() {
       deTextoFecha(filtro.hasta),
       apagados,
       api.getVehiculos(empresaId),
-      { descansos: formularios.descansos, actividades },
+      {
+        descansos: formularios.descansos,
+        actividades,
+        toleranciaLlegadaMin: indicadores.toleranciaLlegadaMin,
+        bateriaBajaPct: indicadores.bateriaBajaPct,
+      },
     );
-  }, [trab, filtro, error, apagados, empresaId, trabajadores.length, formularios, actividades]);
+  }, [trab, filtro, error, apagados, empresaId, trabajadores.length, formularios, actividades, indicadores]);
+  const resIngresos = useMemo(() => (datos ? resumenIngresos(datos) : []), [datos]);
+  const COLS_RESUMEN_INGRESOS = [
+    'Trabajador',
+    'Días con ingreso',
+    'Primer ingreso promedio',
+    'Llegadas tarde',
+    'Tiempo tarde (total)',
+    'PIN incorrectos',
+    'Batería promedio al primer ingreso',
+    'Avisos de batería baja',
+  ];
   const aus = useMemo(() => (datos ? ausentismo(datos) : { eventos: [], resumen: [] }), [datos]);
   const resPausas = useMemo(() => (datos ? resumenPausas(datos) : []), [datos]);
   const COLS_RESUMEN_PAUSAS = [
@@ -157,6 +210,26 @@ export default function NovedadesScreen() {
             filas: [
               ['Trabajador', 'Novedades', 'Días afectados', 'Horas perdidas'],
               ...aus.resumen.map((r) => [r.persona, r.eventos, r.dias, r.horas]),
+            ],
+          },
+        ]
+      : []),
+    ...(pestana === 'ingresos'
+      ? [
+          {
+            titulo: 'Resumen por trabajador',
+            filas: [
+              COLS_RESUMEN_INGRESOS,
+              ...resIngresos.map((r) => [
+                r.persona,
+                r.dias,
+                r.primeroPromedio,
+                r.tardes,
+                r.minutosTarde ? textoDuracion(r.minutosTarde) : '—',
+                r.pin,
+                r.bateriaPromedio != null ? `${r.bateriaPromedio} %` : '—',
+                r.bajas,
+              ]),
             ],
           },
         ]
@@ -222,6 +295,19 @@ export default function NovedadesScreen() {
           ['No pudieron continuar', datos.incidentes.filter((x) => !x.puedeContinuar).length],
         ],
         apagados: [['GPS apagados', datos.apagados.length]],
+        ingresos: (() => {
+          const primeros = datos.ingresos.filter((x) => x.primero);
+          return [
+            ['Ingresos', datos.ingresos.filter((x) => x.evento === 'Ingreso').length],
+            ['Llegadas tarde', primeros.filter((x) => x.minutosTarde).length, 'texto-danger'],
+            ['PIN incorrectos', datos.ingresos.filter((x) => x.evento === 'PIN incorrecto').length],
+            ['Avisos de batería baja', datos.ingresos.filter((x) => x.evento === 'Batería baja').length],
+            [
+              'Batería promedio al primer ingreso',
+              primeros.length ? `${Math.round(primeros.reduce((t, x) => t + x.bateria, 0) / primeros.length)} %` : '—',
+            ],
+          ];
+        })(),
         notificaciones: (() => {
           const n = datos.notificaciones;
           const leidas = n.filter((x) => x.leida);
@@ -298,6 +384,48 @@ export default function NovedadesScreen() {
               </div>
             ))}
           </div>
+
+          {pestana === 'ingresos' && (
+            <section className="panel">
+              <h2>Resumen por trabajador</h2>
+              <div className="tabla-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      {COLS_RESUMEN_INGRESOS.map((c) => (
+                        <th key={c}>{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resIngresos.map((r) => (
+                      <tr key={r.persona}>
+                        <td>{r.persona}</td>
+                        <td>{r.dias}</td>
+                        <td>{r.primeroPromedio}</td>
+                        <td>{r.tardes ? <strong className="rojo">{r.tardes}</strong> : '—'}</td>
+                        <td>{r.minutosTarde ? textoDuracion(r.minutosTarde) : '—'}</td>
+                        <td>{r.pin || '—'}</td>
+                        <td>{r.bateriaPromedio != null ? `🔋 ${r.bateriaPromedio} %` : '—'}</td>
+                        <td>{r.bajas || '—'}</td>
+                      </tr>
+                    ))}
+                    {resIngresos.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="vacio">
+                          Sin ingresos en este período.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <small className="nota">
+                Llegada tarde = primer ingreso del día más de {indicadores.toleranciaLlegadaMin} min después del inicio
+                del horario (se configura en Configuración → Ingresos a la app y batería).
+              </small>
+            </section>
+          )}
 
           {pestana === 'pausas' && (
             <section className="panel">
@@ -414,6 +542,13 @@ export default function NovedadesScreen() {
               <small className="nota">
                 Las respuestas de salud son datos sensibles (Ley 1581): solo los ven los perfiles con el permiso "Ver
                 respuestas de salud".
+              </small>
+            )}
+            {pestana === 'ingresos' && (
+              <small className="nota">
+                Cada ingreso con PIN queda con la hora oficial, la batería, si estaba cargando y la ubicación. También
+                quedan los PIN incorrectos y los avisos de batería baja: sirve como respaldo si el trabajador dice que
+                se le descargó el celular.
               </small>
             )}
             {pestana === 'notificaciones' && (

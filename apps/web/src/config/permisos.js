@@ -29,6 +29,13 @@ export const PERMISOS_WEB = {
     texto: 'Ver las notificaciones enviadas a los trabajadores y si las leyeron',
   },
   'web.empresa.logo': { grupo: 'Configuración', texto: 'Subir o cambiar el logo de la empresa' },
+  'web.ingresos.ver': {
+    grupo: 'Novedades',
+    texto: 'Ver los ingresos a la app y la batería de los trabajadores (llegada tarde, PIN incorrecto…)',
+  },
+  // Alertas: quién las recibe se decide por permiso, no por el nombre del perfil
+  'web.alertas.llegadaTarde': { grupo: 'Alertas', texto: 'Recibir la alerta de llegada tarde' },
+  'web.alertas.bateriaBaja': { grupo: 'Alertas', texto: 'Recibir la alerta de batería baja' },
 };
 
 const NOVEDADES = [
@@ -40,6 +47,9 @@ const NOVEDADES = [
   'web.ausentismo.ver',
   'web.reportes.excluirHoras',
   'web.notificaciones.ver',
+  'web.ingresos.ver',
+  'web.alertas.llegadaTarde',
+  'web.alertas.bateriaBaja',
 ];
 
 // Valores iniciales. El superadministrador y el administrador tienen todo; el administrador decide

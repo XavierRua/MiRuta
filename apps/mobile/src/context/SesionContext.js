@@ -7,6 +7,7 @@ import { estaBloqueado, guardarPin, reiniciarIntentos, tienePin, verificarPin } 
 import { api } from '../services/api';
 import { borrarDocumentos } from '../services/archivos';
 import { documentosVehiculoCompletos } from './DocumentosContext';
+import { registrarIngreso } from '../services/ingresos';
 
 const SesionContext = createContext(null);
 
@@ -69,12 +70,15 @@ export function SesionProvider({ children }) {
     // 2. Crear el PIN de este celular
     crearPin: async (pin) => {
       await guardarPin(pin);
+      registrarIngreso('ingreso', { activacion: true }).catch(() => {}); // primer ingreso en este celular
       await continuar();
     },
 
     // 3. Ingreso diario con PIN. Devuelve { ok, restantes, bloqueado }
     ingresarConPin: async (pin) => {
       const r = await verificarPin(pin);
+      // Cada intento queda registrado con la hora oficial, la batería y la ubicación
+      registrarIngreso(r.ok ? 'ingreso' : r.bloqueado ? 'bloqueo' : 'pin_incorrecto').catch(() => {});
       if (r.ok) await continuar();
       else if (r.bloqueado) {
         await api.avisarAdministrador('pin_bloqueado', { cedula: vinculo?.trabajador?.nombres }, vinculo?.celular);

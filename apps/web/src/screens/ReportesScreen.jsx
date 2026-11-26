@@ -188,6 +188,7 @@ export default function ReportesScreen() {
                   <th>Tarea realizada</th>
                   <th>Lugar</th>
                   <th>Fotos</th>
+                  <th>Batería</th>
                   <th></th>
                 </tr>
               </thead>
@@ -237,6 +238,13 @@ export default function ReportesScreen() {
                         )}
                       </td>
                       <td>
+                        {r.bateria != null ? (
+                          <span className={r.bateria < 20 ? 'texto-danger' : ''}>🔋 {r.bateria} %</span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
                         {r.estado === 'a_tiempo' && (
                           <button className="btn peq" onClick={() => setAbierto(r)}>
                             Ver
@@ -248,7 +256,7 @@ export default function ReportesScreen() {
                 })}
                 {lista.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="vacio">
+                    <td colSpan={8} className="vacio">
                       No hay reportes con estos filtros.
                     </td>
                   </tr>

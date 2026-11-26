@@ -54,6 +54,7 @@ export const PERMISOS = {
   'historial.filtro.eficiencia': { grupo: 'Historial', texto: 'Filtro de eficiencia del período' },
   'historial.filtro.excesos': { grupo: 'Historial', texto: 'Filtro de excesos de velocidad del período' },
   'historial.visitas': { grupo: 'Historial', texto: 'Ver el cumplimiento de visitas en el historial' },
+  'historial.ingresos': { grupo: 'Historial', texto: 'Ver sus ingresos a la app y la batería de cada día' },
   'historial.reportes': { grupo: 'Historial', texto: 'Ver los reportes de días anteriores' },
 
   // ---------- Mi perfil ----------

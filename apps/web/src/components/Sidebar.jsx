@@ -8,11 +8,14 @@ import { ROLES_WEB } from '../config/permisos';
 
 export default function Sidebar() {
   const { usuario, salir, empresaId, setEmpresaId, pantalla, irA, cambiarPerfilDemo } = useSesion();
+  const { indicadores, logos } = useConfig();
   const { puede } = usePermisos();
   // Cada opción del menú puede pedir uno o varios permisos (basta con tener uno)
   const visibles = menu.filter((m) => !m.permisos || m.permisos.some(puede));
-  const { indicadores, logos } = useConfig();
-  const abiertas = api.getAlertas(indicadores.limiteVelocidad).filter((a) => a.estado === 'abierta').length;
+  const PERMISO_ALERTA = { llegada_tarde: 'web.alertas.llegadaTarde', bateria_baja: 'web.alertas.bateriaBaja' };
+  const abiertas = api
+    .getAlertas(indicadores.limiteVelocidad)
+    .filter((a) => a.estado === 'abierta' && (!PERMISO_ALERTA[a.tipo] || puede(PERMISO_ALERTA[a.tipo]))).length;
 
   return (
     <aside className="sidebar">

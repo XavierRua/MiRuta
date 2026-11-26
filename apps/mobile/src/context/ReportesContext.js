@@ -2,6 +2,7 @@ import { createContext, useContext, useState } from 'react';
 import { cancelarRecordatorios, notificarEnviado } from '../services/notificaciones';
 import { api } from '../services/api';
 import { useJornadaDia } from './JornadaDiaContext';
+import { leerBateria } from '../services/bateria';
 
 const ReportesContext = createContext(null);
 
@@ -13,7 +14,9 @@ export function ReportesProvider({ children }) {
 
   // Si el servidor rechaza el reporte (por ejemplo, porque ya cerró la hora), lanza un error
   const enviarReporte = async (reporte) => {
-    const guardado = await api.enviarReporte(reporte, dia.pausas);
+    // La batería al enviar queda en el reporte (respaldo ante "se me descargó el celular")
+    const bateria = await leerBateria();
+    const guardado = await api.enviarReporte({ ...reporte, bateria }, dia.pausas);
     setReportes((lista) => [guardado, ...lista]);
     await cancelarRecordatorios(reporte.franjaId);
     notificarEnviado(reporte.franja).catch(() => {});

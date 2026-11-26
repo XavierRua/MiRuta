@@ -158,7 +158,10 @@ Fin del horario + 1 hora ──► se cierra el último reporte ──► "Jorna
   - Recordatorio de pausa activa cada 2 h.
   - Las configura la web.
 
+**Ingresos a la app**: cada ingreso con PIN (y cada PIN incorrecto) queda con la hora oficial, la batería, si estaba cargando y la ubicación. Llegada tarde si el primer ingreso del día pasa la tolerancia (10 min). Aviso de batería baja (20 %) al trabajador, con alerta.
+
 **Pestaña Historial**
+- **Ingresos y batería** de cada día: primer ingreso (con batería y si llegó tarde), cuántas veces entró, PIN incorrectos, batería al iniciar la jornada y avisos de batería baja. La batería también queda en cada reporte.
 - Día, semana, mes o rango, con filtros de horas extras, kilometraje, eficiencia y excesos.
 - Detalle por día: km, lugares, reportes, visitas y pausas.
 
@@ -354,6 +357,7 @@ MiRuta/
 | `expo-crypto` | Huella SHA-256 del PIN e identificadores aleatorios. |
 | `expo-device` | Modelo y sistema del celular (para vincularlo). |
 | `expo-file-system` | Guardar fotos de documentos y registros del día de forma permanente. |
+| `expo-battery` | Nivel de batería y si está cargando: se guarda en cada ingreso, reporte e inicio de jornada, y avisa cuando está baja. |
 | `expo-sensors` | **Podómetro** (pasos) para saber si va a pie o en vehículo, con muy poco gasto de batería. |
 | `react-native-maps` | Mapas dentro de la app (visitas, geocercas, recorrido). |
 | `@react-native-community/datetimepicker` | Calendario para elegir fechas (historial, vencimientos). |
@@ -361,7 +365,7 @@ MiRuta/
 Comando para instalarlas todas (en `apps/mobile`):
 
 ```bash
-npx expo install expo-location expo-notifications expo-image-picker expo-image-manipulator expo-secure-store expo-crypto expo-device expo-file-system expo-sensors react-native-maps @react-native-community/datetimepicker
+npx expo install expo-location expo-notifications expo-image-picker expo-image-manipulator expo-secure-store expo-crypto expo-device expo-file-system expo-sensors expo-battery react-native-maps @react-native-community/datetimepicker
 ```
 
 ### 5.2 Panel web
@@ -409,6 +413,7 @@ Las migraciones se ejecutan **en orden** en el SQL Editor de Supabase (o con `su
 | `0013_desplazamiento` | A pie, en vehículo o quieto: km y tiempos por jornada y por geocerca. |
 | `0014_inicio_jornada_pausas_incidentes` | Salud y preoperacional configurables, pico y placa, pausas, incidentes, apagado del GPS, horas excluidas, ausentismo y alertas con sonido. |
 | `0015_notificaciones_logo_empresa` | Constancia de entrega y lectura de cada notificación y logo de la empresa (bucket `logos`). |
+| `0017_ingresos_bateria` | Registro de ingresos a la app (y PIN incorrectos) con batería y ubicación, llegada tarde con tolerancia, batería baja, batería en reportes y al iniciar la jornada, y alertas por permiso. |
 | `0016_pausas_actividades_extension_reportes` | Tiempos de pausa por empresa (veces por jornada y bolsa de pausa activa), actividades autorizadas por trabajador y fecha, extensión de la ventana de reporte por pausas, "En pausa" fuera de la eficiencia e informe de pausas. |
 
 Funciones importantes que viven en el servidor:
@@ -447,7 +452,8 @@ if (puede('web.gps.apagar')) { … }
 | `web.salud.verRespuestas` (dato sensible) | ✅ | ✅ | ✅ |
 | `web.preoperacional.ver` · `web.pausas.ver` · `web.incidentes.ver` | ✅ | ✅ | ✅ |
 | `web.gps.apagar` | ✅ | ✅ | ✅ |
-| `web.ausentismo.ver` · `web.notificaciones.ver` | ✅ | ✅ | ✅ |
+| `web.ausentismo.ver` · `web.notificaciones.ver` · `web.ingresos.ver` | ✅ | ✅ | ✅ |
+| `web.alertas.llegadaTarde` · `web.alertas.bateriaBaja` (quién recibe la alerta) | ✅ | ✅ | ✅ |
 | `web.reportes.excluirHoras` | ✅ | ✅ | ✅ |
 
 - En el servidor son las tablas `permisos_catalogo` y `permisos_rol`. El servidor vuelve a revisar cada permiso, así que no basta con ocultar un botón en la pantalla.
@@ -568,7 +574,7 @@ npm run build      # genera la carpeta dist/ lista para Cloudflare Pages
 
 ## 13. Pendientes y hoja de ruta
 
-- [ ] **Conectar Supabase:** cambiar `services/api.js` en la app y en la web, aplicar las migraciones 0001 → 0016 y crear las tareas de `pg_cron`.
+- [ ] **Conectar Supabase:** cambiar `services/api.js` en la app y en la web, aplicar las migraciones 0001 → 0017 y crear las tareas de `pg_cron`.
 - [ ] **Rastreo GPS en segundo plano** por horario y cola sin señal (`services/rastreo.js`). Necesita un *development build*: no funciona en Expo Go.
 - [ ] **Perfiles de la web** (Superadministrador, Administrador de empresa, Jefe de servicio técnico, SST) con inicio de sesión real, y pantalla para encender o apagar todos los permisos por rol.
 - [ ] Alerta **con sonido** en la web mediante Realtime.

@@ -43,6 +43,7 @@ export const menu = [
       'web.incidentes.ver',
       'web.ausentismo.ver',
       'web.notificaciones.ver',
+      'web.ingresos.ver',
     ],
   },
   { id: 'alertas', texto: 'Alertas', Icono: FiBell },

@@ -161,3 +161,22 @@
 - **Dos registros separados**: (a) el reporte de actividad con su nota ("Reporte 8:00–9:00 · Enviado a las 9:10 · Extendido +15 min por desayuno") y (b) el registro de pausas y actividades (tipo, inicio, fin, duración y quién autorizó). Los dos se ven en el historial de la app y en la web (Reportes de actividad; Novedades → Pausas y actividades, con resumen por trabajador —tiempo total de descanso, almuerzo promedio, quién excede el almuerzo— y descarga en Excel o PDF; Historial y km).
 - **Permisos independientes**: `web.pausas.configurar` y `web.actividades.autorizar` en la web; `pausas.usar` y `actividades.usar` en la app.
 - **Servidor**: migración 0016 (todas las validaciones con `now()` y hora de Colombia).
+
+## Ingresos a la app y batería
+
+- **Cada ingreso con PIN** queda registrado con la hora oficial (servidor), la batería (%), si estaba cargando y la ubicación. También quedan los **PIN incorrectos**, el **bloqueo** y los **avisos de batería baja**. Sirve para el control de llegada y como respaldo ante reclamos ("se me descargó el celular").
+- **Llegada tarde**: el primer ingreso del día más de 10 min (tolerancia configurable por el administrador en la web) después del inicio del horario. Crea una alerta.
+- **Batería** también en cada **reporte de actividad**, en el **estado de salud**, en el **preoperacional** y al **iniciar la jornada** (con el rastreo en segundo plano se tomará en el momento exacto en que arranca el GPS).
+- **Batería baja**: durante el horario, si baja del nivel configurado (20 %) y no está cargando, se le avisa al trabajador una vez al día ("Carga tu celular") y queda registrado con alerta.
+- **Dónde se ve**: app → Historial (Ingresos y batería de cada día; batería en cada reporte). Web → Novedades → Ingresos y batería (detalle, resumen por trabajador con llegadas tarde y batería promedio, Excel/PDF), Reportes de actividad (columna Batería), Historial y km, y Alertas.
+- **Alertas por permiso**: quién recibe la alerta de llegada tarde o de batería baja lo decide el administrador de la empresa con los permisos `web.alertas.llegadaTarde` y `web.alertas.bateriaBaja` (no el nombre del perfil). Ver los ingresos: `web.ingresos.ver`. App: `historial.ingresos`.
+- **Librería**: `expo-battery` (gratis, funciona en Expo Go).
+- **Servidor**: migración 0017.
+
+## Perfiles y permisos (etapa siguiente)
+
+- **Administrador de la aplicación** (dueño de MiRuta): crea y administra las empresas, sus planes y el catálogo general de permisos.
+- **Administrador de la empresa**: crea los perfiles que necesite (no solo los fijos) y les enciende los permisos. Los perfiles actuales (Supervisor / Jefe de servicio técnico, SST, Trabajador) quedan como **plantillas** para no empezar de cero.
+- **Las alertas también son permisos**: cada alerta llega a los perfiles que tengan su permiso.
+- Cambio técnico previsto: pasar de perfiles fijos (`rol_usuario`) a una tabla de perfiles por empresa con sus permisos.
+- El catálogo completo de permisos se mantiene en `config/permisos.js` (app y web) y en la tabla `permisos_catalogo`.

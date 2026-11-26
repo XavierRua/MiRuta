@@ -90,4 +90,7 @@ export const REGLAS_JORNADA = {
   pausaActivaCadaMin: 120, // recordatorio con sonido para hacer pausa activa cada 2 horas
   limiteFormulariosMin: 30, // si a los 30 min del inicio no ha diligenciado salud y preoperacional: alerta
   saludSalidaAntesMin: 30, // el reporte de salud de salida se habilita 30 min antes del fin del horario
+  // Ingresos y batería (los valores reales los configura el administrador en la web)
+  toleranciaLlegadaMin: 10, // primer ingreso del día más de 10 min después del inicio del horario → llegada tarde
+  bateriaBajaPct: 20, // por debajo de este nivel (y sin cargar) se le avisa al trabajador y queda registrado
 };

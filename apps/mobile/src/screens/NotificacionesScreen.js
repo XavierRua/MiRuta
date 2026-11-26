@@ -18,6 +18,7 @@ const TIPOS = {
   pausa_activa: ['body', color.morado, color.moradoSuave],
   gps_apagado: ['power', color.rojo, color.rojoSuave],
   actividad: ['checkmark-circle', color.morado, color.moradoSuave],
+  bateria_baja: ['battery-dead', color.ambar, color.ambarSuave],
 };
 const tipo = (t) => TIPOS[t] ?? ['notifications', color.suave, color.fondo];
 

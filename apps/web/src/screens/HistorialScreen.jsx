@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { FiDownload, FiAlertTriangle, FiCoffee, FiEye, FiFlag } from 'react-icons/fi';
+import { FiDownload, FiAlertTriangle, FiCoffee, FiEye, FiFlag, FiLogIn } from 'react-icons/fi';
+import { Permiso } from '../context/PermisosContext';
 import VisitaDetalleModal from '../components/VisitaDetalleModal';
 import FiltroHistorialAdmin from '../components/FiltroHistorialAdmin';
 import LeyendaDesplazamiento from '../components/LeyendaDesplazamiento';
@@ -70,16 +71,33 @@ export default function HistorialScreen() {
   const { programaciones } = useProgramacion();
   // Registro de pausas y actividades autorizadas del trabajador (aparte de los reportes)
   const { formularios, actividades, apagados } = useNovedades();
-  const pausasPeriodo = useMemo(
+  const novedadesPeriodo = useMemo(
     () =>
       error || !t
-        ? []
+        ? { pausas: [], ingresos: [] }
         : generarNovedades([t], deTextoFecha(filtro.desde), deTextoFecha(filtro.hasta), apagados, [], {
             descansos: formularios.descansos,
             actividades,
-          }).pausas,
-    [t?.id, filtro, error, formularios, actividades, apagados],
+            toleranciaLlegadaMin: indicadores.toleranciaLlegadaMin,
+            bateriaBajaPct: indicadores.bateriaBajaPct,
+          }),
+    [t?.id, filtro, error, formularios, actividades, apagados, indicadores],
   );
+  const pausasPeriodo = novedadesPeriodo.pausas;
+  // Ingresos a la app por día: primer ingreso (con batería y llegada tarde), cuántos y avisos de batería baja
+  const ingresosPorDia = useMemo(() => {
+    const m = new Map();
+    for (const x of novedadesPeriodo.ingresos) {
+      const k = x.fecha.toDateString();
+      const d = m.get(k) ?? { fecha: x.fecha, primero: null, ingresos: 0, pin: 0, baja: null };
+      if (x.primero) d.primero = x;
+      if (x.evento === 'Ingreso') d.ingresos += 1;
+      if (x.evento === 'PIN incorrecto') d.pin += 1;
+      if (x.evento === 'Batería baja') d.baja = x;
+      m.set(k, d);
+    }
+    return [...m.values()];
+  }, [novedadesPeriodo]);
   const descansoMin = pausasPeriodo.filter((p) => p.clase === 'Descanso').reduce((x, p) => x + p.minutos, 0);
   const visitasPeriodo = useMemo(
     () =>
@@ -342,6 +360,42 @@ export default function HistorialScreen() {
                 </ul>
               )}
             </section>
+
+            <Permiso clave="web.ingresos.ver">
+              <section className="panel">
+                <h2>
+                  <FiLogIn /> Ingresos a la app y batería
+                </h2>
+                {ingresosPorDia.length === 0 ? (
+                  <p className="nota">Sin ingresos en este periodo.</p>
+                ) : (
+                  <ul className="lista-visitas">
+                    {ingresosPorDia.map((d) => (
+                      <li key={d.fecha.toDateString()}>
+                        <span className={`chip ${d.primero?.minutosTarde ? 'warn' : 'ok'}`}>
+                          {d.primero?.minutosTarde ? `${textoDuracion(d.primero.minutosTarde)} tarde` : 'A tiempo'}
+                        </span>
+                        <div>
+                          <strong>
+                            {fechaCorta(d.fecha)} · primer ingreso {d.primero?.hora ?? '—'}
+                            {d.primero ? ` · 🔋 ${d.primero.bateria} %` : ''}
+                          </strong>
+                          <small className="bloque">
+                            {d.ingresos} {d.ingresos === 1 ? 'ingreso' : 'ingresos'}
+                            {d.pin ? ` · ${d.pin} PIN incorrecto` : ''}
+                          </small>
+                          {d.baja && (
+                            <small className="bloque texto-danger">
+                              Batería baja a las {d.baja.hora} ({d.baja.bateria} %)
+                            </small>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </Permiso>
 
             <section className="panel">
               <h2>

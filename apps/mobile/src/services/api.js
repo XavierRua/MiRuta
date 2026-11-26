@@ -276,6 +276,18 @@ export const api = {
     console.log('[demo] alerta al administrador:', tipo, cuenta?.cedula ?? '', dispositivo?.modelo ?? '');
   },
 
+  // Registro de ingresos (ingreso con PIN, PIN incorrecto, bloqueo, batería baja) con batería y ubicación.
+  // Con Supabase: tabla ingresos_app (0017); el servidor calcula la llegada tarde y crea las alertas.
+  registrarIngreso: async (r) => {
+    console.log(
+      '[demo] ingreso:',
+      r.tipo,
+      r.hora,
+      r.bateria ? `${r.bateria.pct}%` : 'sin batería',
+      r.minutosTarde ? `tarde ${r.minutosTarde} min` : '',
+    );
+  },
+
   // Bandeja de notificaciones. Con Supabase: tabla notificaciones_trabajador (0015).
   // Cada notificación que llega al celular queda registrada (entregada) y, al marcarla como leída, se guarda la hora:
   // en la web se ve quién la leyó y cuándo.

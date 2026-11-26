@@ -396,6 +396,22 @@ export const eventosGeocerca = [
 ];
 export const alertas = [
   {
+    id: 31,
+    tipo: 'llegada_tarde',
+    trabajador: 'Diego Muñoz',
+    mensaje: 'Primer ingreso a la app a las 7:24 (24 min después del inicio de su horario) · 🔋 81 %',
+    hora: '7:24',
+    estado: 'abierta',
+  },
+  {
+    id: 32,
+    tipo: 'bateria_baja',
+    trabajador: 'Laura Cárdenas',
+    mensaje: 'Su celular quedó con 18 % de batería y no está cargando. Se le avisó para que lo cargue.',
+    hora: '10:05',
+    estado: 'abierta',
+  },
+  {
     id: 21,
     tipo: 'salud_no_apto',
     trabajador: 'Mateo Vélez',
@@ -620,6 +636,8 @@ function generarReportes() {
             franja: `${h}:00 – ${h + 1}:00`,
             estado,
             pausa: almuerzo ? 'Almuerzo' : null,
+            // Batería al enviar el reporte (respaldo ante "se me descargó el celular")
+            bateria: estado === 'a_tiempo' ? Math.max(9, 97 - (h - 7) * 7 - (semilla % 9)) : null,
             extension: desayuno ? 'Extendido +15 min por desayuno' : null,
             enviadoEn: estado === 'a_tiempo' ? enviadoEn : null,
             descripcion: estado === 'a_tiempo' ? tareasEjemplo[semilla % tareasEjemplo.length] : null,

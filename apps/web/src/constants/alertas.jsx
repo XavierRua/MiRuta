@@ -22,6 +22,7 @@ import {
 } from 'react-icons/fi';
 
 export const alertaInfo = {
+  llegada_tarde: { texto: 'Llegada tarde', icono: <FiClock />, clase: 'warn' },
   salud_no_apto: { texto: 'No está en condiciones de trabajar', icono: <FiHeart />, clase: 'danger' },
   salud_alerta: { texto: 'Novedad de salud', icono: <FiHeart />, clase: 'warn' },
   formularios_pendientes: { texto: 'No ha diligenciado salud / preoperacional', icono: <FiClock />, clase: 'warn' },
